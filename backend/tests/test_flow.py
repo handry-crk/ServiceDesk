@@ -140,3 +140,29 @@ def test_pin_lock(c):
         c.post("/api/auth/login", json={"name": "Admin", "pin": "000000"})
     r = c.post("/api/auth/login", json={"name": "Admin", "pin": "111111"})
     assert r.status_code == 423
+
+
+def test_admin_pin_resync_and_legacy_hash():
+    """Admin yang dibuat dengan PIN/SECRET_KEY lama dan belum pernah login ikut DEFAULT_ADMIN_PIN baru."""
+    import asyncio
+    from app import core, services
+    from app.auth import _legacy_hash, verify_pin, hash_pin
+
+    assert verify_pin("123456", _legacy_hash("123456", "abcd", core.Config.SECRET_KEY)) is True
+    assert verify_pin("123456", hash_pin("123456")) and not verify_pin("654321", hash_pin("123456"))
+
+    async def run():
+        core.Config.USE_MOCK_DB = True
+        db = core.init_db()
+        await db.users.delete_many({})
+        await db.users.insert_one({"id": "a1", "name": "Admin", "role": "Admin", "active": True,
+                                   "pinHash": _legacy_hash("999999", "s1", "secret-lama")})
+        await services.seed_if_empty()
+        u = await db.users.find_one({"name": "Admin"})
+        assert verify_pin(core.Config.DEFAULT_ADMIN_PIN, u["pinHash"])
+        # setelah pernah login, PIN tidak disentuh lagi
+        await db.users.update_one({"id": "a1"}, {"$set": {"lastLogin": core.now(), "pinHash": hash_pin("222333")}})
+        await services.seed_if_empty()
+        u = await db.users.find_one({"name": "Admin"})
+        assert verify_pin("222333", u["pinHash"])
+    asyncio.run(run())

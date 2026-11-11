@@ -13,17 +13,31 @@ WRITERS = ("Admin", "CS Lead", "CS Agent")
 
 
 def hash_pin(pin: str, salt: str | None = None):
+    """PBKDF2 + salt per user. Sengaja TIDAK memakai SECRET_KEY, supaya mengganti
+    SECRET_KEY di Railway tidak membuat semua PIN tidak bisa dipakai."""
     salt = salt or secrets.token_hex(8)
-    h = hashlib.pbkdf2_hmac("sha256", (pin + Config.SECRET_KEY).encode(), salt.encode(), 120_000).hex()
-    return f"{salt}${h}"
+    h = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt.encode(), 120_000).hex()
+    return f"v2${salt}${h}"
+
+
+def _legacy_hash(pin, salt, secret):
+    return f"{salt}$" + hashlib.pbkdf2_hmac("sha256", (pin + secret).encode(), salt.encode(), 120_000).hex()
 
 
 def verify_pin(pin: str, stored: str) -> bool:
-    try:
+    if not stored:
+        return False
+    if stored.startswith("v2$"):
+        try:
+            _, salt, _ = stored.split("$", 2)
+        except ValueError:
+            return False
+        return hmac.compare_digest(hash_pin(pin, salt), stored)
+    try:  # format lama (versi pertama): pin + SECRET_KEY
         salt, _ = stored.split("$", 1)
     except ValueError:
         return False
-    return hmac.compare_digest(hash_pin(pin, salt), stored)
+    return hmac.compare_digest(_legacy_hash(pin, salt, Config.SECRET_KEY), stored)
 
 
 async def current_user(authorization: str = Header(default="")):

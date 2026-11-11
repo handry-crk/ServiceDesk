@@ -25,7 +25,7 @@ USE_MOCK_DB=true DATA_DIR=./data DEFAULT_ADMIN_PIN=111111 uvicorn app.main:app -
 # frontend (terminal lain)
 cd frontend && npm install && npm run dev      # http://localhost:5173, proxy /api ke :8000
 ```
-Login: **Admin** / PIN dari `DEFAULT_ADMIN_PIN`. Tes: `cd backend && pytest -q`.
+Login: **Admin** / PIN dari `DEFAULT_ADMIN_PIN` (wajib 6 digit angka). Selama Admin belum pernah berhasil login, PIN-nya selalu mengikuti `DEFAULT_ADMIN_PIN` terbaru. Lupa PIN Admin setelah itu: set `RESET_ADMIN_PIN=true`, redeploy, login, lalu hapus variable tersebut. Tes: `cd backend && pytest -q`.
 
 ## Deploy ke Railway
 1. Push repo ini ke GitHub (mis. `handry-crk/ServiceDesk`, privat).

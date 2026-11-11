@@ -15,9 +15,12 @@ class Config:
     DB_NAME = os.getenv("DB_NAME", "service_desk")
     USE_MOCK_DB = os.getenv("USE_MOCK_DB", "false").lower() in ("1", "true", "yes")
     SECRET_KEY = os.getenv("SECRET_KEY", "ganti-secret-ini")
-    DEFAULT_ADMIN_PIN = os.getenv("DEFAULT_ADMIN_PIN", "123456")
+    DEFAULT_ADMIN_PIN = os.getenv("DEFAULT_ADMIN_PIN", "123456").strip()
     METRICS_API_KEY = os.getenv("METRICS_API_KEY", "ganti-api-key-ini")
-    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
+    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").strip().rstrip("/")
+    if PUBLIC_BASE_URL and not PUBLIC_BASE_URL.startswith("http"):
+        PUBLIC_BASE_URL = "https://" + PUBLIC_BASE_URL
+    RESET_ADMIN_PIN = os.getenv("RESET_ADMIN_PIN", "false").lower() in ("1", "true", "yes")
     DATA_DIR = os.getenv("DATA_DIR", "/data")
     RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
     MAIL_FROM = os.getenv("MAIL_FROM", "Service Desk <noreply@example.com>")
@@ -46,6 +49,8 @@ def init_db():
                       ("METRICS_API_KEY", "ganti-api-key-ini")):
         if getattr(Config, name) == val:
             log.warning("%s masih memakai nilai bawaan. Ganti di environment variable sebelum produksi.", name)
+    if not (len(Config.DEFAULT_ADMIN_PIN) == 6 and Config.DEFAULT_ADMIN_PIN.isdigit()):
+        log.error("DEFAULT_ADMIN_PIN harus 6 digit angka (form login hanya menerima 6 digit).")
     return db
 
 

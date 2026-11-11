@@ -30,8 +30,11 @@ export async function api(path, { method = 'GET', body, form, params } = {}) {
     if (!location.pathname.startsWith('/login')) location.href = '/login'
   }
   const ct = r.headers.get('content-type') || ''
-  const data = ct.includes('json') ? await r.json() : r
-  if (!r.ok) throw new ApiError(r.status, data?.detail ?? 'Terjadi kesalahan')
+  const data = ct.includes('json') ? await r.json().catch(() => ({})) : r
+  if (!r.ok) {
+    const fallback = r.status >= 500 ? `Server sedang bermasalah atau sedang restart (kode ${r.status}). Coba lagi 1 menit lagi.` : `Terjadi kesalahan (kode ${r.status}).`
+    throw new ApiError(r.status, data?.detail ?? fallback)
+  }
   return data
 }
 

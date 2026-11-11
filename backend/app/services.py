@@ -7,7 +7,7 @@ from datetime import timedelta
 from fastapi import HTTPException
 
 from . import standards as S
-from .auth import hash_pin
+from .auth import hash_pin, verify_pin
 from .core import get_db, now, as_utc, Config, log
 from .logic import load_ctx, compute_case
 
@@ -37,6 +37,19 @@ async def seed_if_empty():
         await db.users.insert_one({"id": new_id(), "name": "Admin", "role": "Admin", "areas": [],
                                    "pinHash": hash_pin(Config.DEFAULT_ADMIN_PIN), "active": True, "created": now()})
         log.info("User 'Admin' dibuat dengan DEFAULT_ADMIN_PIN.")
+    else:
+        # Admin yang belum pernah berhasil login → PIN disamakan dengan DEFAULT_ADMIN_PIN saat ini.
+        # Mengatasi Admin yang terbentuk saat deploy awal sebelum variable final diisi.
+        adm = await db.users.find_one({"name": "Admin", "role": "Admin"})
+        if adm and not adm.get("lastLogin") and not verify_pin(Config.DEFAULT_ADMIN_PIN, adm.get("pinHash", "")):
+            await db.users.update_one({"id": adm["id"]}, {"$set": {
+                "pinHash": hash_pin(Config.DEFAULT_ADMIN_PIN), "failedPins": 0, "lockedUntil": None}})
+            log.info("PIN 'Admin' (belum pernah login) disamakan dengan DEFAULT_ADMIN_PIN.")
+    if Config.RESET_ADMIN_PIN:
+        await db.users.update_one({"name": "Admin"}, {"$set": {
+            "pinHash": hash_pin(Config.DEFAULT_ADMIN_PIN), "failedPins": 0, "lockedUntil": None, "active": True,
+            "role": "Admin"}})
+        log.warning("RESET_ADMIN_PIN=true: PIN 'Admin' direset ke DEFAULT_ADMIN_PIN. Hapus variable ini setelah login.")
     for coll, keys in (("cases", ["caseId", "tanggalMasuk", "status", "outletId", "subJenis", "surveyToken"]),
                        ("sessions", ["token"]), ("vouchers", ["kode", "status"]), ("csat", ["id", "timestamp"]),
                        ("reviews", ["id"]), ("events", ["caseId"])):

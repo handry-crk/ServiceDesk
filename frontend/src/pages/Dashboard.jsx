@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import Compare from './Compare.jsx'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Cell, LabelList } from 'recharts'
 import { api, useApp, useAsync, fmtNum, fmtPct, fmtRp, fmtMin, presets, fmtD } from '../lib.jsx'
 import { Card, ErrorBox, Skeleton, PeriodPicker, StatusPill, Info, Delta, CARA_HITUNG, LevelBadge, inputCls } from '../ui.jsx'
@@ -237,20 +238,29 @@ export default function Dashboard() {
   const [period, setPeriod] = useState({ from: p.from, to: p.to })
   const [brand, setBrand] = useState('')
   const [area, setArea] = useState('')
-  const { data: d, loading, error } = useAsync(() => api('/dashboard', { params: { ...period, brand, area } }), [period.from, period.to, brand, area])
+  const [sp, setSp] = useSearchParams()
+  const view = sp.get('view') === 'komparasi' ? 'komparasi' : 'periode'
+  const { data: d, loading, error } = useAsync(() => view === 'periode' ? api('/dashboard', { params: { ...period, brand, area } }) : Promise.resolve(null), [period.from, period.to, brand, area, view])
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <div><h1 className="text-2xl font-extrabold">Dashboard Service Excellence</h1>
-          {d && <p className="text-sm text-mute">{fmtD(d.period.from)} – {fmtD(d.period.to)} · dibandingkan {fmtD(d.period.prevFrom)} – {fmtD(d.period.prevTo)}</p>}</div>
+          {d && view === 'periode' && <p className="text-sm text-mute">{fmtD(d.period.from)} – {fmtD(d.period.to)} · dibandingkan {fmtD(d.period.prevFrom)} – {fmtD(d.period.prevTo)}</p>}</div>
         <div className="flex gap-2">
           <select className={inputCls + ' !min-h-[40px] w-auto'} value={brand} onChange={(e) => setBrand(e.target.value)}><option value="">Semua brand</option>{masters?.brands.map((b) => <option key={b}>{b}</option>)}</select>
           <select className={inputCls + ' !min-h-[40px] w-auto'} value={area} onChange={(e) => setArea(e.target.value)}><option value="">Semua area</option>{masters?.areas.map((b) => <option key={b}>{b}</option>)}</select>
         </div>
       </div>
+      <div className="flex gap-1 mb-4 bg-white border border-line rounded-xl p-1 w-fit">
+        {[['periode', 'Ringkasan periode'], ['komparasi', 'Komparasi week / month']].map(([k, l]) => (
+          <button key={k} onClick={() => setSp(k === 'periode' ? {} : { view: k })} className={`px-4 min-h-[40px] rounded-lg text-sm font-semibold ${view === k ? 'bg-brick text-white' : 'hover:bg-cream'}`}>{l}</button>
+        ))}
+      </div>
+      {view === 'komparasi' ? <Compare brand={brand} area={area} /> : <>
       <div className="mb-4"><PeriodPicker value={period} onChange={setPeriod} /></div>
       <ErrorBox error={error} />
       {loading && !d ? <div className="grid gap-3"><Skeleton /><Skeleton h="h-64" /></div> : d && <div className={loading ? 'opacity-60 transition' : 'transition'}><DashboardBody d={d} /></div>}
+      </>}
     </div>
   )
 }

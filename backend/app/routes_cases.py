@@ -487,6 +487,69 @@ async def dashboard(u=Depends(current_user), frm: str = Query(..., alias="from")
     return await build_dashboard(frm, to, u, brand, area)
 
 
+BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+
+
+def compare_periods(mode: str, n: int, end: date):
+    """Periode kalender: minggu Senin–Minggu atau bulan penuh. Periode terakhir berisi `end`
+    (berjalan / belum penuh). Urut lama → baru."""
+    out = []
+    if mode == "week":
+        start = end - timedelta(days=end.weekday())
+        for i in range(n - 1, -1, -1):
+            s = start - timedelta(weeks=i)
+            e = s + timedelta(days=6)
+            iso = s.isocalendar()
+            out.append({"key": f"{iso[0]}-W{iso[1]:02d}", "label": f"W{iso[1]} · {s.day} {BULAN[s.month - 1]}",
+                        "from": s, "to": e})
+    else:
+        y, m = end.year, end.month
+        for i in range(n - 1, -1, -1):
+            yy, mm = y, m - i
+            while mm <= 0:
+                mm += 12
+                yy -= 1
+            s = date(yy, mm, 1)
+            e = (date(yy + (mm == 12), mm % 12 + 1, 1) - timedelta(days=1))
+            out.append({"key": f"{yy}-{mm:02d}", "label": f"{BULAN[mm - 1]} {yy}", "from": s, "to": e})
+    for p in out:
+        p["partial"] = p["to"] > end
+        p["toData"] = min(p["to"], end)
+    return out
+
+
+@router.get("/dashboard/compare")
+async def dashboard_compare(u=Depends(current_user), mode: str = "week", n: int = 8, end: Optional[str] = None,
+                            brand: Optional[str] = None, area: Optional[str] = None):
+    if mode not in ("week", "month"):
+        raise HTTPException(400, "mode harus week atau month.")
+    n = max(2, min(n, 26 if mode == "week" else 24))
+    end_d = date.fromisoformat(end) if end else wib_date(now())
+    periods = compare_periods(mode, n, end_d)
+    ctx = await load_ctx()
+    targets = ctx["targets"]
+    allc = await cases_in_period(periods[0]["from"].isoformat(), end_d.isoformat(), u, brand, area, ctx)
+    rows = []
+    sub_counts = {}
+    for p in periods:
+        f, t = p["from"].isoformat(), p["toData"].isoformat()
+        cs = [c for c in allc if c.get("tanggalMasuk") and f <= c["tanggalMasuk"] <= t]
+        trx = await total_trx(p["from"], p["toData"])
+        m, vol, _ = compute_metrics(cs, targets, trx)
+        komplain = [c for c in cs if c.get("tipe", "Komplain") == "Komplain"]
+        for c in komplain:
+            k = c.get("subJenis") or "Belum Terklasifikasi"
+            sub_counts.setdefault(k, {})[p["key"]] = sub_counts.get(k, {}).get(p["key"], 0) + 1
+        lv = {lvl: sum(1 for c in komplain if c.get("level") == lvl) for lvl in ("Minor", "Major", "Critical")}
+        rows.append({"key": p["key"], "label": p["label"], "from": f, "to": p["to"].isoformat(), "partial": p["partial"],
+                     "days": (p["toData"] - p["from"]).days + 1, "metrics": m, "volume": vol, "levels": lv,
+                     "totalTrx": trx})
+    subs = sorted(sub_counts.items(), key=lambda kv: -sum(kv[1].values()))[:12]
+    return {"mode": mode, "periods": rows, "targets": targets,
+            "subJenis": [{"name": k, "counts": [v.get(r["key"], 0) for r in rows], "total": sum(v.values())}
+                         for k, v in subs]}
+
+
 # ------------------------------------------------------------------ meeting
 
 class MeetingIn(BaseModel):

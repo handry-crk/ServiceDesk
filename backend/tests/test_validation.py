@@ -261,3 +261,17 @@ def test_meeting_lock(ctx):
     assert c.patch(f"/api/meetings/{m['id']}", json={"insights": []}, headers=H).status_code == 400
     g = c.get(f"/api/meetings/{m['id']}", headers=H).json()
     assert g["meeting"]["locked"] and g["dashboard"]["volume"]["komplain"] >= 1
+
+
+def test_compare_week_month(ctx):
+    c, H, o = ctx
+    r = c.get("/api/dashboard/compare", params={"mode": "month", "n": 3, "end": "2026-11-10"}, headers=H).json()
+    assert [p["key"] for p in r["periods"]] == ["2026-09", "2026-10", "2026-11"]
+    assert r["periods"][-1]["partial"] and r["periods"][-1]["days"] == 10
+    nov = c.get("/api/dashboard", params={"from": "2026-11-01", "to": "2026-11-10"}, headers=H).json()
+    assert r["periods"][-1]["volume"]["komplain"] == nov["volume"]["komplain"]
+    w = c.get("/api/dashboard/compare", params={"mode": "week", "n": 4, "end": "2026-11-11"}, headers=H).json()
+    p = w["periods"]
+    assert p[-1]["from"] == "2026-11-09" and p[-1]["to"] == "2026-11-15" and p[0]["from"] == "2026-10-19"
+    assert all(len(s["counts"]) == 4 for s in w["subJenis"])
+    assert c.get("/api/dashboard/compare", params={"mode": "year"}, headers=H).status_code == 400

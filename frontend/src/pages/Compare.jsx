@@ -50,12 +50,17 @@ function meets(m, v, targets) {
   return t.dir === 'max' ? (m.key === 'reopen' ? v < t.target : v <= t.target) : v >= t.target
 }
 
-export default function Compare({ brand, area }) {
+/** meeting: { end, snapshot } — dipakai di Mode Meeting: tanggal akhir = akhir periode meeting,
+ *  dan bila meeting terkunci, angka diambil dari snapshot (tidak berubah lagi). */
+export default function Compare({ brand, area, meeting }) {
   const [mode, setMode] = useState('week')
-  const [n, setN] = useState(8)
-  const [end, setEnd] = useState(todayWIB())
+  const [n, setN] = useState(meeting ? 6 : 8)
+  const [end, setEnd] = useState(meeting?.end || todayWIB())
   const [sel, setSel] = useState('komplain')
-  const { data, loading, error } = useAsync(() => api('/dashboard/compare', { params: { mode, n, end, brand, area } }), [mode, n, end, brand, area])
+  const snap = meeting?.snapshot?.[mode]
+  const { data, loading, error } = useAsync(
+    () => snap ? Promise.resolve(snap) : api('/dashboard/compare', { params: { mode, n, end, brand, area } }),
+    [mode, n, end, brand, area, !!snap])
   const m = METRICS.find((x) => x.key === sel)
   const chart = useMemo(() => (data?.periods || []).map((p) => ({ name: p.label, v: val(p, m), partial: p.partial })), [data, m])
   const target = data?.targets?.[sel]?.target
@@ -64,13 +69,15 @@ export default function Compare({ brand, area }) {
 
   return (
     <div className="space-y-4">
-      <Card className="p-4 flex flex-wrap items-center gap-2">
-        <Chip active={mode === 'week'} onClick={() => { setMode('week'); setN(8) }}>Week by week</Chip>
+      <Card className="p-4 flex flex-wrap items-center gap-2 no-print">
+        <Chip active={mode === 'week'} onClick={() => { setMode('week'); setN(meeting ? 6 : 8) }}>Week by week</Chip>
         <Chip active={mode === 'month'} onClick={() => { setMode('month'); setN(6) }}>Month by month</Chip>
+        {meeting ? <span className="text-sm text-mute ml-2">{snap ? 'Snapshot saat meeting dikunci' : `s.d. ${fmtD(end)} (akhir periode meeting)`}</span> : <>
         <span className="mx-1 text-line">|</span>
         {nOpts.map((x) => <Chip key={x} active={n === x} onClick={() => setN(x)}>{x} {mode === 'week' ? 'minggu' : 'bulan'}</Chip>)}
         <span className="mx-1 text-line">|</span>
         <label className="text-sm flex items-center gap-2">s.d.<input type="date" className={inputCls + ' !min-h-[40px] w-auto'} value={end} max={todayWIB()} onChange={(e) => setEnd(e.target.value || todayWIB())} /></label>
+        </>}
         <span className="text-xs text-mute w-full">Minggu = Senin–Minggu. Periode terakhir yang belum penuh ditandai “berjalan” — bandingkan dengan hati-hati.</span>
       </Card>
       <ErrorBox error={error} />
@@ -96,11 +103,11 @@ export default function Compare({ brand, area }) {
           </Card>
 
           <Card className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[720px]">
+            <table className={`w-full text-sm ${meeting ? '' : 'min-w-[720px]'}`}>
               <thead>
                 <tr className="bg-brick text-white text-left">
                   <th className="px-3 py-2 sticky left-0 bg-brick">Metric</th><th className="px-3 py-2">Target</th>
-                  {data.periods.map((p) => <th key={p.key} className="px-3 py-2 whitespace-nowrap text-right">{p.label}{p.partial && <div className="text-[10px] font-normal opacity-90">berjalan · {p.days} hari</div>}</th>)}
+                  {data.periods.map((p) => <th key={p.key} className={`${meeting ? 'px-2' : 'px-3'} py-2 whitespace-nowrap text-right`}>{p.label}{p.partial && <div className="text-[10px] font-normal opacity-90">berjalan · {p.days} hari</div>}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -116,7 +123,7 @@ export default function Compare({ brand, area }) {
                         const dl = j > 0 ? delta(x, v, val(data.periods[j - 1], x), p, data.periods[j - 1]) : null
                         const ok = meets(x, v, data.targets)
                         return (
-                          <td key={p.key} className={`px-3 py-2 text-right tabnum whitespace-nowrap ${p.partial ? 'bg-cream/60' : ''}`}>
+                          <td key={p.key} className={`${meeting ? 'px-2' : 'px-3'} py-2 text-right tabnum whitespace-nowrap ${p.partial ? 'bg-cream/60' : ''}`}>
                             <div className={`font-semibold ${ok === false ? 'text-brick' : ok ? 'text-ok' : ''}`}>{fmt(x.kind, v)}</div>
                             {dl && <div className={`text-[11px] ${dl.cls}`}>{dl.txt}</div>}
                           </td>

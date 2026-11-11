@@ -261,6 +261,9 @@ def test_meeting_lock(ctx):
     assert c.patch(f"/api/meetings/{m['id']}", json={"insights": []}, headers=H).status_code == 400
     g = c.get(f"/api/meetings/{m['id']}", headers=H).json()
     assert g["meeting"]["locked"] and g["dashboard"]["volume"]["komplain"] >= 1
+    cmp = g["dashboard"]["compare"]
+    assert len(cmp["week"]["periods"]) == 6 and len(cmp["month"]["periods"]) == 6
+    assert cmp["week"]["periods"][-1]["from"] <= "2026-11-10" <= cmp["week"]["periods"][-1]["to"]
 
 
 def test_compare_week_month(ctx):

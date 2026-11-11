@@ -521,6 +521,10 @@ def compare_periods(mode: str, n: int, end: date):
 @router.get("/dashboard/compare")
 async def dashboard_compare(u=Depends(current_user), mode: str = "week", n: int = 8, end: Optional[str] = None,
                             brand: Optional[str] = None, area: Optional[str] = None):
+    return await build_compare(mode, n, end, u, brand, area)
+
+
+async def build_compare(mode="week", n=8, end=None, u=None, brand=None, area=None):
     if mode not in ("week", "month"):
         raise HTTPException(400, "mode harus week atau month.")
     n = max(2, min(n, 26 if mode == "week" else 24))
@@ -636,6 +640,8 @@ async def lock(mid: str, u=Depends(require(*LEAD))):
     if not m:
         raise HTTPException(404, "Meeting tidak ditemukan.")
     dash = await build_dashboard(m["periodStart"], m["periodEnd"])
+    dash["compare"] = {"week": await build_compare("week", 6, m["periodEnd"]),
+                       "month": await build_compare("month", 6, m["periodEnd"])}
     await db.meetings.update_one({"id": mid}, {"$set": {"locked": True, "snapshot": dash, "lockedAt": now(),
                                                         "lockedBy": u["name"]}})
     return {"ok": True}

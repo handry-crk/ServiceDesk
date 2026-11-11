@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, useApp, useAsync, fmtDT, fmtNum, download, LEAD } from '../lib.jsx'
+import { api, useApp, useAsync, fmtDT, fmtD, fmtNum, download, LEAD } from '../lib.jsx'
 import { Btn, Card, Chip, ErrorBox, Field, Sheet, Skeleton, inputCls, LevelBadge } from '../ui.jsx'
 
 const TABS = [['standard', 'Standard CRM.STD.001'], ['target', 'Target & SLA'], ['outlet', 'Outlet'], ['user', 'User'], ['transaksi', 'Transaksi bulanan'], ['impor', 'Impor sheet lama'], ['sistem', 'Sistem']]
@@ -23,6 +23,11 @@ function Standard() {
   const upd = (arr, set, i, k, v) => set(arr.map((x, j) => j === i ? { ...x, [k]: v } : x))
   return (
     <div className="space-y-6">
+      {masters.standardDoc && <Card className="p-4 text-sm">
+        <div className="font-bold">{masters.standardDoc.code} — {masters.standardDoc.title}</div>
+        <div className="text-mute">Revisi {masters.standardDoc.revision} · efektif {fmtD(masters.standardDoc.effective)} · referensi: {masters.standardDoc.reference}</div>
+        <div className="text-mute mt-1">Bila standard direvisi, ubah matriks di bawah lalu Simpan; semua case dihitung ulang otomatis.</div>
+      </Card>}
       <Card className="p-4 overflow-x-auto">
         <div className="flex items-center justify-between mb-2"><h3 className="font-bold">Matriks klasifikasi (4.4)</h3><Btn size="sm" onClick={() => save('subJenis', sj)}>Simpan</Btn></div>
         <table className="w-full text-sm min-w-[900px]"><thead className="text-left text-mute"><tr><th className="p-1">Sub jenis</th><th className="p-1">Jenis</th><th className="p-1">Level</th><th className="p-1">Contoh</th><th className="p-1">Kata kunci pencarian</th><th className="p-1">Aktif</th></tr></thead>

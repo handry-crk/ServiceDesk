@@ -158,6 +158,7 @@ function ResolveSheet({ open, onClose, c, masters, onDone }) {
           <input className={inputCls} value={rc} onChange={(e) => setRc(e.target.value)} placeholder="Atau tulis sendiri" />
         </Field>
         <Field label="PIC Dept"><select className={inputCls} value={pic} onChange={(e) => setPic(e.target.value)}>{masters?.picDept.map((p) => <option key={p}>{p}</option>)}</select></Field>
+        {masters?.standardDoc?.considerations && <div className="text-xs bg-cream rounded-xl p-3"><b>Pertimbangan pemberian complimentary ({masters.standardDoc.code} bag. 5):</b> {masters.standardDoc.considerations.join(' · ')}.</div>}
         <Field label={`Bentuk kompensasi (level ${c.level || 'belum diatur'})`} required>
           <div className="grid gap-2">
             {komp.map((x) => (

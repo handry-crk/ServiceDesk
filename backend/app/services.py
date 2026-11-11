@@ -20,6 +20,20 @@ async def seed_if_empty():
     db = get_db()
     if await db.sub_jenis.count_documents({}) == 0:
         await db.sub_jenis.insert_many([dict(x) for x in S.SUB_JENIS])
+    else:
+        # migrasi teks contoh & kata kunci sesuai dokumen MASTER CRM.STD.001 (hanya bila belum diubah manual)
+        new = {x["name"]: x for x in S.SUB_JENIS}
+        for name, (old_c, old_k) in S.SUB_JENIS_OLD_TEXT.items():
+            cur = await db.sub_jenis.find_one({"name": name})
+            if not cur:
+                continue
+            upd = {}
+            if cur.get("contoh") == old_c:
+                upd["contoh"] = new[name]["contoh"]
+            if cur.get("keywords") == old_k:
+                upd["keywords"] = new[name]["keywords"]
+            if upd:
+                await db.sub_jenis.update_one({"name": name}, {"$set": upd})
     if await db.channels.count_documents({}) == 0:
         await db.channels.insert_many([dict(x, order=i) for i, x in enumerate(S.CHANNELS)])
     else:

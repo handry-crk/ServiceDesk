@@ -33,6 +33,10 @@ CHANNELS = [
     {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Survei & Review"},
 ]
 
+STANDARD_DOC = {"code": "CRM.STD.001", "title": "Standar Penanganan Komplain dan Complimentary", "revision": "00",
+                "effective": "2026-10-20", "reference": "CRK.QA.P.003 Keluhan Pelanggan; CRK.MMS.003 Manual Sistem Jaminan Produk Halal",
+                "considerations": ["Tingkat keluhan/komplain", "Dampak yang dialami pelanggan", "Jumlah produk yang terdampak", "Jarak customer"]}
+
 REVIEW_PLATFORMS = ["GoFood", "GrabFood", "ShopeeFood"]
 
 TIPE = ["Komplain", "Inquiry", "Advice and Suggestion"]
@@ -53,8 +57,8 @@ _SJ = [
      "basi busuk masam asem tidak bisa dimakan spoiled", "Kitchen / QC", "Gudang / Packing Frozen",
      ["Penyimpanan", "Expired", "Rantai dingin", "Bahan baku"]),
     ("Kontaminasi", "Product Quality", "Critical",
-     "Kontaminasi bahan haram/najis; benda asing (rambut, kertas, kawat, pest)",
-     "rambut benda asing plastik kawat kertas kecoa serangga halal najis", "Kitchen / QC", "Gudang / Packing Frozen",
+     "Kontaminasi bahan haram/najis sehingga produk tidak halal; benda asing (rambut, kertas, kawat, pest, logam, kaca, benda tajam)",
+     "rambut benda asing plastik kawat kertas kecoa serangga halal haram najis logam kaca beling tajam paku", "Kitchen / QC", "Gudang / Packing Frozen",
      ["Personal hygiene", "Area produksi", "Kemasan"]),
     ("Cacat Produksi", "Product Quality", "Major",
      "Quantity kurang/lebih, varian dalam satu pack tidak sesuai dengan label kemasan",
@@ -78,8 +82,8 @@ _SJ = [
      "salah beda tertukar bukan pesanan varian salah", "Ops / Outlet", "Gudang / Packing Frozen",
      ["Ketelitian Crew", "Varian Salah", "Salah input"]),
     ("Payment Issue", "Service", "Major",
-     "Uang kembalian tidak sesuai/tidak diberi, double payment, payment cashless tidak masuk",
-     "kembalian bayar dua kali double payment qris transfer", "Ops / Outlet", "Tech / Online Platform",
+     "Uang kembalian tidak sesuai/tidak diberi, double payment (saldo terpotong dua kali), kesalahan hitung pada tagihan, payment cashless tidak masuk",
+     "kembalian bayar dua kali double payment saldo terpotong tagihan salah hitung qris transfer", "Ops / Outlet", "Tech / Online Platform",
      ["Kembalian", "QRIS", "Double payment"]),
     ("Jam Operasional", "Service", "Minor", "Jam buka outlet tidak sesuai dengan jadwal jam operasional",
      "tutup belum buka jam buka", "Ops / Outlet", "Ops / Outlet", ["Crew telat", "Stok habis"]),
@@ -96,16 +100,16 @@ _SJ = [
     ("Kebersihan Equipment", "Cleanliness", "Major", "Peralatan yang digunakan terlihat kotor, berkarat, berdebu",
      "alat kotor karat debu wajan minyak hitam", "Ops / Outlet", "Ops / Outlet", ["Kebersihan alat"]),
     ("Personal Hygiene", "Cleanliness", "Minor",
-     "Mitra tidak memakai apron, topi, sepatu tertutup, celana panjang, masker, sarung tangan; aksesoris berlebihan",
-     "apron topi masker sarung tangan merokok", "Ops / Outlet", "Ops / Outlet", ["Grooming"]),
+     "Mitra tidak memakai apron, topi, sepatu tertutup, celana panjang (tidak sobek), masker mulut & sarung tangan saat bekerja; aksesoris berlebihan; pakaian provokatif",
+     "apron topi masker sarung tangan merokok aksesoris pakaian provokatif grooming", "Ops / Outlet", "Ops / Outlet", ["Grooming"]),
     ("Potential Fraud", "Potential Fraud", "Minor",
-     "Menjual produk selain Cimol Bojot AA, menjual produk mentah, menjual supply ke pedagang lain, membatasi porsi padahal tersedia",
-     "porsi kecil tidak ada tidak dikasih bill struk jual lain", "Ops / Outlet", "Ops / Outlet", ["Mitra"]),
+     "Menjual produk selain Cimol Bojot AA, menjual produk mentah ke customer, menjual supply Cimol Bojot AA ke pedagang lain, mengatakan hanya menjual porsi tertentu padahal produk & packaging tersedia",
+     "porsi kecil tidak ada tidak dikasih bill struk jual lain mentah supply", "Ops / Outlet", "Ops / Outlet", ["Mitra"]),
     ("Social Media Complaint", "Social Media Complaint", "Critical",
      "Komentar publik, story mention, atau viral complain",
      "viral story komentar mention tiktok instagram", "Marketing", "Marketing", ["Viral"]),
-    ("Keracunan", "Product Quality", "Critical", "Dugaan keracunan pangan (4.3 d)",
-     "keracunan sakit perut muntah diare mual", "Kitchen / QC", "Kitchen / QC", ["Bahan baku", "Penyimpanan"]),
+    ("Keracunan", "Product Quality", "Critical", "Dugaan keracunan pangan; berpotensi gangguan kesehatan atau cedera (4.3 b & d)",
+     "keracunan sakit perut muntah diare mual pusing alergi cedera", "Kitchen / QC", "Kitchen / QC", ["Bahan baku", "Penyimpanan"]),
     ("Perkelahian / Adu Argumen", "Service", "Critical",
      "Terjadi perkelahian atau adu argumen dengan customer, termasuk kejadian yang berpotensi viral",
      "berantem ribut adu argumen marah bentak", "Ops / Outlet", "Ops / Outlet", ["Sikap crew"]),
@@ -121,6 +125,9 @@ _SJ = [
      "Keluhan rasa/porsi/harga yang belum ada di CRM.STD.001 (dipakai untuk Review Online)",
      "rasa hambar bumbu sedikit porsi kecil mahal", "Ops / Outlet", "Ops / Outlet", ["Bumbu", "Porsi"]),
 ]
+
+# Teks lama (versi awal) — dipakai migrasi: hanya diganti bila belum diubah CS Lead
+SUB_JENIS_OLD_TEXT = {'Kontaminasi': ('Kontaminasi bahan haram/najis; benda asing (rambut, kertas, kawat, pest)', 'rambut benda asing plastik kawat kertas kecoa serangga halal najis'), 'Payment Issue': ('Uang kembalian tidak sesuai/tidak diberi, double payment, payment cashless tidak masuk', 'kembalian bayar dua kali double payment qris transfer'), 'Personal Hygiene': ('Mitra tidak memakai apron, topi, sepatu tertutup, celana panjang, masker, sarung tangan; aksesoris berlebihan', 'apron topi masker sarung tangan merokok'), 'Potential Fraud': ('Menjual produk selain Cimol Bojot AA, menjual produk mentah, menjual supply ke pedagang lain, membatasi porsi padahal tersedia', 'porsi kecil tidak ada tidak dikasih bill struk jual lain'), 'Keracunan': ('Dugaan keracunan pangan (4.3 d)', 'keracunan sakit perut muntah diare mual')}
 
 SUB_JENIS = [
     {"name": n, "jenis": j, "level": l, "contoh": c, "keywords": k,

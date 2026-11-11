@@ -321,3 +321,23 @@ def test_meeting_sources(ctx):
     assert {"Online Food Aggregator", "GrabFood"} <= names
     g = next(x for x in cmp["sources"] if x["name"] == "Online Food Aggregator")
     assert g["isGroup"] and g["total"] == sum(x["total"] for x in cmp["sources"] if x.get("group") == "Online Food Aggregator")
+
+
+def test_standard_text_migration(ctx):
+    """Teks contoh lama diganti versi dokumen MASTER; teks yang sudah diubah CS Lead tidak disentuh."""
+    import asyncio
+    from app import services, standards as S
+    c, H, o = ctx
+    db = core.get_db()
+    old_c, old_k = S.SUB_JENIS_OLD_TEXT["Kontaminasi"]
+
+    async def run():
+        await db.sub_jenis.update_one({"name": "Kontaminasi"}, {"$set": {"contoh": old_c, "keywords": old_k}})
+        await db.sub_jenis.update_one({"name": "Keracunan"}, {"$set": {"contoh": "ditulis CS Lead"}})
+        await services.seed_if_empty()
+    asyncio.run(run())
+    sj = {x["name"]: x for x in c.get("/api/masters", headers=H).json()["subJenis"]}
+    assert "logam" in sj["Kontaminasi"]["contoh"] and "kaca" in sj["Kontaminasi"]["keywords"]
+    assert sj["Keracunan"]["contoh"] == "ditulis CS Lead"
+    doc = c.get("/api/masters", headers=H).json()["standardDoc"]
+    assert doc["code"] == "CRM.STD.001" and doc["effective"] == "2026-10-20" and len(doc["considerations"]) == 4

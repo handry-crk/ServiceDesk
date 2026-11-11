@@ -307,3 +307,17 @@ def test_food_aggregator_channels(ctx):
     g = {x["name"]: x["count"] for x in d["sourceGroups"]}
     assert g.get("Online Food Aggregator", 0) >= 1
     assert next(x for x in d["channels"] if x["name"] == "ShopeeFood")["group"] == "Online Food Aggregator"
+
+
+def test_meeting_sources(ctx):
+    c, H, o = ctx
+    today = datetime.now(WIB).date().isoformat()
+    mk(c, H, o, channel="GrabFood", subJenis="Wrong Item", orderNo="A-1")
+    m = c.post("/api/meetings", json={"date": today, "periodStart": today, "periodEnd": today}, headers=H).json()
+    s = c.post(f"/api/meetings/{m['id']}/suggest", headers=H).json()
+    assert any("Online Food Aggregator" in r["whatHappened"] for r in s) and len(s) <= 5
+    cmp = c.get("/api/dashboard/compare", params={"mode": "week", "n": 4}, headers=H).json()
+    names = {x["name"] for x in cmp["sources"]}
+    assert {"Online Food Aggregator", "GrabFood"} <= names
+    g = next(x for x in cmp["sources"] if x["name"] == "Online Food Aggregator")
+    assert g["isGroup"] and g["total"] == sum(x["total"] for x in cmp["sources"] if x.get("group") == "Online Food Aggregator")

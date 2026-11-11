@@ -80,7 +80,11 @@ export default function MeetingView() {
       `*${m.title}*`, `Periode ${fmtD(d.period.from)} – ${fmtD(d.period.to)}`, '',
       `Komplain ${v.komplain} (Critical ${v.critical}), open ${v.open}`,
       `FRT ${x.frt ?? '-'} mnt · SLA Response ${fmtPct(x.slaResponse)} · Same-Day ${fmtPct(x.sameDay)} · FCR ${fmtPct(x.fcr)} · CSAT ${fmtPct(x.csat)}`,
-      `Biaya kompensasi ${fmtRp(v.biaya)} (di luar standard ${fmtRp(v.biayaLuarStandard)})`, '', '*Top 5 issue*',
+      `Biaya kompensasi ${fmtRp(v.biaya)} (di luar standard ${fmtRp(v.biayaLuarStandard)})`,
+      ...(d.sourceGroups?.length ? [`Sumber: ${d.sourceGroups.map((g) => `${g.name} ${g.count}`).join(' · ')}`] : []),
+      ...(d.channels?.some((c) => c.group === 'Online Food Aggregator') ? [`Aggregator: ${d.channels.filter((c) => c.group === 'Online Food Aggregator').map((c) => `${c.name} ${c.count}`).join(' · ')}`] : []),
+      ...(reviews.count ? [`Review online: ${Object.entries(reviews.byPlatform || {}).map(([k, n]) => `${k} ${n}`).join(' · ')} (Critical ${reviews.critical}, belum diproses ${reviews.belumDiproses})`] : []),
+      '', '*Top 5 issue*',
       ...top5.map((t) => `${t.rank}. ${t.name} — ${t.count} (${fmtPct(t.pct)})${t.action?.action ? ` → ${t.action.action} [${t.action.picDept || '-'}, ${t.action.status}]` : ''}`),
       '', '*Insight*', ...ins.filter((i) => i.whatHappened).map((i, k) => `${k + 1}. ${i.whatHappened}${i.action ? ` → ${i.action} (${i.pic || '-'})` : ''}`),
     ]
@@ -113,6 +117,22 @@ export default function MeetingView() {
             <LevelTable d={d} />
             <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold mb-2">Jenis komplain</div><HBar rows={d.jenis} /></div>
           </div>
+          {d.sourceGroups?.length > 0 && (
+            <div className="bg-white rounded-2xl border border-line p-4 mt-4">
+              <div className="font-bold mb-3">Sumber komplain</div>
+              <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
+                <div className="grid grid-cols-2 gap-2 content-start">{d.sourceGroups.map((g) => (
+                  <div key={g.name} className={`rounded-xl px-3 py-2 ${g.name === 'Online Food Aggregator' ? 'bg-brick-soft' : 'bg-cream'}`}>
+                    <div className="text-xs text-mute">{g.name}</div>
+                    <div className="text-2xl font-extrabold tabnum">{g.count} <span className="text-sm font-normal text-mute">{fmtPct(g.pct)}</span></div>
+                    <div className="text-xs text-mute">FRT {g.avgFrt === null ? '–' : `${fmtNum(g.avgFrt)} mnt`} · SLA {fmtPct(g.slaResponse)} · Critical {g.critical}</div>
+                  </div>
+                ))}</div>
+                <table className="w-full text-sm self-start"><thead className="text-left text-mute"><tr>{['Channel', 'Case', 'FRT', '% SLA', 'Critical'].map((h) => <th key={h} className="py-1 font-semibold">{h}</th>)}</tr></thead>
+                  <tbody>{d.channels.map((r) => <tr key={r.name} className="border-t border-line tabnum"><td className="py-1.5">{r.name}<span className="text-xs text-mute ml-2">{r.group}</span></td><td>{r.count}</td><td>{r.avgFrt === null ? '–' : `${fmtNum(r.avgFrt)} mnt`}</td><td>{fmtPct(r.slaResponse)}</td><td className={r.critical ? 'text-brick font-bold' : ''}>{r.critical}</td></tr>)}</tbody></table>
+              </div>
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-3 mt-4">
             <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold">Komplain per minggu</div><Weekly weeks={d.weeks} k="komplain" name="Komplain" fmt={fmtNum} /></div>
             <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold">% SLA Response</div><Weekly weeks={d.weeks} k="slaResponse" name="SLA" fmt={fmtPct} target={d.targets.slaResponse.target} /></div>
@@ -182,8 +202,9 @@ export default function MeetingView() {
         <Slide n={6} title={SLIDES[6]} refs={refs}>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-line p-4">
-              <div className="font-bold mb-2">Review online (GoFood/GrabFood)</div>
+              <div className="font-bold mb-2">Review online (GoFood / GrabFood / ShopeeFood)</div>
               <div className="text-4xl font-extrabold">{reviews.count}<span className="text-base font-normal text-mute"> review komplain</span></div>
+              {Object.keys(reviews.byPlatform || {}).length > 0 && <div className="flex flex-wrap gap-2 mt-2">{Object.entries(reviews.byPlatform).map(([k, v]) => <span key={k} className="px-2 py-1 rounded-lg bg-cream text-sm">{k} <b>{v}</b></span>)}</div>}
               <div className="text-sm mt-1">Critical <b className="text-brick">{reviews.critical}</b> · Belum diproses <b>{reviews.belumDiproses}</b></div>
               <ul className="mt-3 text-sm space-y-1">{reviews.bySubJenis.map(([k, v]) => <li key={k} className="flex justify-between border-b border-line/60 py-1"><span>{k}</span><b>{v}</b></li>)}</ul>
             </div>

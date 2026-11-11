@@ -29,8 +29,8 @@ CHANNELS = [
      "orderRequired": True},
     {"name": "ShopeeFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
      "orderRequired": True},
-    {"name": "CSAT Form", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Sistem"},
-    {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Sistem"},
+    {"name": "CSAT Form", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Survei & Review"},
+    {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Survei & Review"},
 ]
 
 REVIEW_PLATFORMS = ["GoFood", "GrabFood", "ShopeeFood"]

@@ -137,6 +137,28 @@ export default function Compare({ brand, area, meeting }) {
             <p className="text-xs text-mute p-3">Angka hijau/merah = memenuhi/di bawah target. ▲▼ = perubahan dibanding kolom sebelumnya; hijau berarti membaik. Persentase berubah dalam poin (pt), angka lain dalam %. Untuk periode berjalan, volume & biaya dibandingkan rata-rata per hari (/hari).</p>
           </Card>
 
+          {data.sources?.length > 0 && <Card className="overflow-x-auto">
+            <h3 className="font-bold p-4 pb-2">Komplain per sumber per {data.mode === 'week' ? 'minggu' : 'bulan'}</h3>
+            <table className={`w-full text-sm ${meeting ? '' : 'min-w-[720px]'}`}>
+              <thead className="text-left text-mute">
+                <tr><th className="px-3 py-1 sticky left-0 bg-white">Sumber</th>{data.periods.map((p) => <th key={p.key} className="px-2 py-1 text-right whitespace-nowrap">{p.label}</th>)}<th className="px-3 py-1 text-right">Total</th></tr>
+              </thead>
+              <tbody>
+                {data.sources.map((s) => (
+                  <tr key={s.name} className={`border-t ${s.isGroup ? 'border-ink/20 bg-cream/50 font-semibold' : 'border-line'}`}>
+                    <td className={`py-1.5 sticky left-0 whitespace-nowrap ${s.isGroup ? 'px-3 bg-cream' : 'pl-7 pr-3 bg-white text-mute'}`}>{s.name}</td>
+                    {s.counts.map((v, i) => {
+                      const prev = i > 0 ? s.counts[i - 1] : null
+                      return <td key={i} className="px-2 py-1.5 text-right tabnum">{v || '·'}{s.isGroup && prev !== null && v !== prev && !data.periods[i].partial && <span className={`ml-1 text-[10px] ${v > prev ? 'text-brick' : 'text-ok'}`}>{v > prev ? '▲' : '▼'}</span>}</td>
+                    })}
+                    <td className="px-3 py-1.5 text-right font-bold tabnum">{s.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-xs text-mute p-3">Baris tebal = kelompok sumber (Chat & Sosmed, Marketplace, Online Food Aggregator); baris di bawahnya = channel. ▲ naik / ▼ turun dibanding periode sebelumnya.</p>
+          </Card>}
+
           <Card className="overflow-x-auto">
             <h3 className="font-bold p-4 pb-2">Komplain per sub jenis per {data.mode === 'week' ? 'minggu' : 'bulan'}</h3>
             <table className="w-full text-sm min-w-[720px]">

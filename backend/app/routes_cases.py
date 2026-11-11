@@ -541,6 +541,8 @@ async def build_compare(mode="week", n=8, end=None, u=None, brand=None, area=Non
     allc = await cases_in_period(periods[0]["from"].isoformat(), end_d.isoformat(), u, brand, area, ctx)
     rows = []
     sub_counts = {}
+    src_counts = {}
+    grp = {name: (ch.get("group") or "Lainnya") for name, ch in ctx["channels"].items()}
     for p in periods:
         f, t = p["from"].isoformat(), p["toData"].isoformat()
         cs = [c for c in allc if c.get("tanggalMasuk") and f <= c["tanggalMasuk"] <= t]
@@ -550,12 +552,26 @@ async def build_compare(mode="week", n=8, end=None, u=None, brand=None, area=Non
         for c in komplain:
             k = c.get("subJenis") or "Belum Terklasifikasi"
             sub_counts.setdefault(k, {})[p["key"]] = sub_counts.get(k, {}).get(p["key"], 0) + 1
+            for sk in (grp.get(c.get("channel"), "Lainnya"), c.get("channel") or "-"):
+                src_counts.setdefault(sk, {})[p["key"]] = src_counts.get(sk, {}).get(p["key"], 0) + 1
         lv = {lvl: sum(1 for c in komplain if c.get("level") == lvl) for lvl in ("Minor", "Major", "Critical")}
         rows.append({"key": p["key"], "label": p["label"], "from": f, "to": p["to"].isoformat(), "partial": p["partial"],
                      "days": (p["toData"] - p["from"]).days + 1, "metrics": m, "volume": vol, "levels": lv,
                      "totalTrx": trx})
     subs = sorted(sub_counts.items(), key=lambda kv: -sum(kv[1].values()))[:12]
-    return {"mode": mode, "periods": rows, "targets": targets,
+    groups_order = list(dict.fromkeys(grp.values()))
+    sources = []
+    for g in groups_order:
+        if g not in src_counts:
+            continue
+        sources.append({"name": g, "isGroup": True, "counts": [src_counts[g].get(r["key"], 0) for r in rows],
+                        "total": sum(src_counts[g].values())})
+        for chn, cg in grp.items():
+            if cg == g and chn in src_counts:
+                sources.append({"name": chn, "isGroup": False, "group": g,
+                                "counts": [src_counts[chn].get(r["key"], 0) for r in rows],
+                                "total": sum(src_counts[chn].values())})
+    return {"mode": mode, "periods": rows, "targets": targets, "sources": sources,
             "subJenis": [{"name": k, "counts": [v.get(r["key"], 0) for r in rows], "total": sum(v.values())}
                          for k, v in subs]}
 
@@ -636,7 +652,19 @@ async def suggest(mid: str, u=Depends(current_user)):
     cases = await cases_in_period(m["periodStart"], m["periodEnd"])
     dash = await build_dashboard(m["periodStart"], m["periodEnd"])
     komplain = [c for c in cases if c.get("tipe", "Komplain") == "Komplain"]
-    return suggest_insights(komplain, dash["metrics"], dash["volume"], dash["subJenis"], dash["levels"])
+    rows = suggest_insights(komplain, dash["metrics"], dash["volume"], dash["subJenis"], dash["levels"])
+    agg = [r for r in dash["channels"] if r.get("group") == "Online Food Aggregator" and r["count"]]
+    if agg:
+        n = sum(r["count"] for r in agg)
+        aggc = {r["name"] for r in agg}
+        from collections import Counter
+        top = Counter(c.get("subJenis") for c in komplain if c.get("channel") in aggc).most_common(2)
+        rows.insert(min(2, len(rows)), {
+            "whatHappened": f"{n} komplain dari Online Food Aggregator (" + ", ".join(f"{r['name']} {r['count']}" for r in agg)
+                            + "); terbanyak " + ", ".join(f"{k} {v}" for k, v in top if k),
+            "why": "", "businessImpact": "Rating outlet di platform dan peluang order online",
+            "action": "", "pic": "Ops / Outlet + CRM / CS"})
+    return rows[:5]
 
 
 @router.post("/meetings/{mid}/lock")

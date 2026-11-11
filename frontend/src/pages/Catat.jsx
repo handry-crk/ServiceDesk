@@ -31,7 +31,7 @@ export default function Catat() {
   const ch = masters?.channels.find((c) => c.name === channel)
   const chGroups = useMemo(() => {
     const g = {}
-    ;(masters?.channels || []).filter((c) => c.group !== 'Sistem' && !['CSAT Form', 'Review Online'].includes(c.name))
+    ;(masters?.channels || []).filter((c) => !['CSAT Form', 'Review Online'].includes(c.name))
       .forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
     return Object.entries(g)
   }, [masters])

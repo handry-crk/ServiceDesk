@@ -31,6 +31,8 @@ async def seed_if_empty():
                 await db.channels.insert_one(dict(ch, order=i))
             else:
                 fill = {k: ch[k] for k in ("group", "orderRequired") if k in ch and k not in cur}
+                if cur.get("group") == "Sistem":
+                    fill["group"] = ch["group"]
                 fill["order"] = i
                 await db.channels.update_one({"name": ch["name"]}, {"$set": fill})
     if await db.kompensasi.count_documents({}) == 0:

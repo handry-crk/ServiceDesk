@@ -5,7 +5,6 @@ import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge } from '../ui.js
 import { Combo, levelItemBadge } from '../components.jsx'
 
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
-const MAIN_CH = ['WhatsApp', 'IG DM', 'TikTok DM', 'Marketplace Chat', 'Live Chat', 'Social Comment', 'Email']
 
 export default function Catat() {
   const { masters, notify, can } = useApp()
@@ -30,6 +29,13 @@ export default function Catat() {
   const sj = masters?.subJenis.find((s) => s.name === subJenis)
   const outlet = masters?.outlets.find((o) => o.id === outletId)
   const ch = masters?.channels.find((c) => c.name === channel)
+  const chGroups = useMemo(() => {
+    const g = {}
+    ;(masters?.channels || []).filter((c) => c.group !== 'Sistem' && !['CSAT Form', 'Review Online'].includes(c.name))
+      .forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
+    return Object.entries(g)
+  }, [masters])
+  const orderRequired = !!ch?.orderRequired
   const level = sj?.level
   const pj = masters?.penanggungJawab?.[level] || '-'
   const tfrt = level === 'Critical' ? Math.min(ch?.targetFrt || 5, masters?.criticalFrt || 30) : ch?.targetFrt
@@ -84,10 +90,13 @@ export default function Catat() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-extrabold mb-1">Catat komplain</h1>
-      <p className="text-sm text-mute mb-4">5 isian saja. Level, PJ, cost center, dan target SLA terisi otomatis.</p>
+      <p className="text-sm text-mute mb-4">5 isian saja (+ No. Pesanan untuk GoFood, GrabFood, ShopeeFood & marketplace). Level, PJ, cost center, dan target SLA terisi otomatis.</p>
       <Card className="p-4 space-y-5">
         <Field label="Channel" required>
-          <div className="flex flex-wrap gap-2">{MAIN_CH.map((c) => <Chip key={c} active={channel === c} onClick={() => setChannel(c)}>{c}</Chip>)}</div>
+          <div className="space-y-2">{chGroups.map(([g, list]) => (
+            <div key={g}><div className="text-xs text-mute mb-1">{g}</div>
+              <div className="flex flex-wrap gap-2">{list.map((c) => <Chip key={c} active={channel === c} onClick={() => setChannel(c)}>{c}</Chip>)}</div></div>
+          ))}</div>
         </Field>
         <Field label="Outlet" required><Combo items={outlets} value={outletId} onChange={setOutletId} placeholder="Ketik nama outlet…" recent={recentOutlets} /></Field>
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “mentah”, “kurang”, “salah”, “rambut”, “lama”.">
@@ -108,6 +117,11 @@ export default function Catat() {
             <button type="button" onClick={speak} className={`absolute right-2 top-2 w-9 h-9 rounded-full ${listening ? 'bg-brick text-white animate-pulse' : 'bg-cream'}`} title="Bicara">🎤</button>
           </div>
         </Field>
+        {orderRequired && (
+          <Field label={`No. Pesanan ${channel}`} hint="Disarankan diisi: dipakai untuk cek duplikat dan klaim ke platform.">
+            <input className={inputCls} value={extra.orderNo} onChange={(e) => setExtra({ ...extra, orderNo: e.target.value.trim() })} placeholder={channel === 'GoFood' ? 'F-1234567890' : channel === 'GrabFood' ? 'A-XXXXXXXX' : 'No. pesanan'} />
+          </Field>
+        )}
         <Field label="Waktu masuk" required>
           <div className="flex flex-wrap gap-2 items-center">
             <Chip active={!waktu} onClick={() => setWaktu(null)}>Sekarang</Chip>
@@ -122,7 +136,7 @@ export default function Catat() {
             <Field label="Brand"><select className={inputCls} value={extra.brand} onChange={(e) => setExtra({ ...extra, brand: e.target.value })}>
               <option value="">{outlet?.brand || 'Cimol Bojot AA'}</option>{(masters?.brands || []).map((b) => <option key={b}>{b}</option>)}</select></Field>
             <Field label="Tipe"><select className={inputCls} value={extra.tipe} onChange={(e) => setExtra({ ...extra, tipe: e.target.value })}>{masters?.tipe.map((t) => <option key={t}>{t}</option>)}</select></Field>
-            <Field label="No. Pesanan"><input className={inputCls} value={extra.orderNo} onChange={(e) => setExtra({ ...extra, orderNo: e.target.value })} /></Field>
+            {!orderRequired && <Field label="No. Pesanan"><input className={inputCls} value={extra.orderNo} onChange={(e) => setExtra({ ...extra, orderNo: e.target.value })} /></Field>}
             <Field label="Nama customer"><input className={inputCls} value={extra.customerName} onChange={(e) => setExtra({ ...extra, customerName: e.target.value })} /></Field>
             <Field label="No. HP customer"><input className={inputCls} inputMode="tel" value={extra.customerPhone} onChange={(e) => setExtra({ ...extra, customerPhone: e.target.value })} /></Field>
             <Field label={`Foto bukti (${photos.length}/3)`}>

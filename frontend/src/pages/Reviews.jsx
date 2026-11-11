@@ -29,7 +29,7 @@ function ReviewTab() {
     <>
       <div className="flex flex-wrap gap-2 mb-3 items-center"><PeriodPicker value={period} onChange={setPeriod} />{writer && <Btn size="sm" onClick={() => setAdd(true)}>+ Review</Btn>}</div>
       <div className="flex flex-wrap gap-2 mb-3">
-        {['', 'GoFood', 'GrabFood'].map((x) => <Chip key={x} active={f.platform === x} onClick={() => setF({ ...f, platform: x })}>{x || 'Semua platform'}</Chip>)}
+        {['', ...(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood'])].map((x) => <Chip key={x} active={f.platform === x} onClick={() => setF({ ...f, platform: x })}>{x || 'Semua platform'}</Chip>)}
         {['', 'Critical', 'Major', 'Minor'].map((x) => <Chip key={'l' + x} active={f.level === x} onClick={() => setF({ ...f, level: x })}>{x || 'Semua level'}</Chip>)}
         <select className={inputCls + ' !min-h-[40px] w-auto'} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">Semua status</option>{STATUS.map((s) => <option key={s}>{s}</option>)}</select>
       </div>
@@ -56,7 +56,7 @@ function ReviewTab() {
       )}
       <Sheet open={add} onClose={() => setAdd(false)} title="Tambah review online">
         <div className="space-y-3">
-          <div className="flex gap-2">{['GoFood', 'GrabFood'].map((x) => <Chip key={x} active={nr.platform === x} onClick={() => setNr({ ...nr, platform: x })}>{x}</Chip>)}</div>
+          <div className="flex gap-2">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood']).map((x) => <Chip key={x} active={nr.platform === x} onClick={() => setNr({ ...nr, platform: x })}>{x}</Chip>)}</div>
           <Field label="Tanggal"><input type="datetime-local" className={inputCls} value={nr.tanggal} onChange={(e) => setNr({ ...nr, tanggal: e.target.value })} /></Field>
           <Field label="Outlet"><Combo items={outlets} value={nr.outletId} onChange={(v) => setNr({ ...nr, outletId: v })} /></Field>
           <Field label="Rating"><div className="flex gap-2">{[1, 2, 3, 4, 5].map((x) => <Chip key={x} active={nr.rating === x} onClick={() => setNr({ ...nr, rating: x })}>★{x}</Chip>)}</div></Field>
@@ -73,6 +73,7 @@ function ReviewTab() {
 }
 
 function RatingTab() {
+  const { masters } = useApp()
   const { data, loading, error } = useAsync(() => api('/ratings'), [])
   const [plat, setPlat] = useState('GoFood')
   const [month, setMonth] = useState('')
@@ -89,7 +90,7 @@ function RatingTab() {
   return (
     <>
       <ErrorBox error={error} />
-      <div className="flex flex-wrap gap-2 mb-3">{['GoFood', 'GrabFood'].map((x) => <Chip key={x} active={plat === x} onClick={() => { setPlat(x); setMonth('') }}>{x}</Chip>)}
+      <div className="flex flex-wrap gap-2 mb-3">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood']).map((x) => <Chip key={x} active={plat === x} onClick={() => { setPlat(x); setMonth('') }}>{x}</Chip>)}
         <select className={inputCls + ' !min-h-[40px] w-auto'} value={m || ''} onChange={(e) => setMonth(e.target.value)}>{months.map((x) => <option key={x}>{x}</option>)}</select></div>
       {plat === 'GrabFood' && <p className="text-xs text-mute mb-2">Export GrabFood hanya berisi rata-rata rating harian, jadi Jumlah Rating = jumlah hari outlet punya rating.</p>}
       <div className="grid grid-cols-3 gap-3 mb-4">
@@ -110,7 +111,7 @@ export default function Reviews() {
   const [tab, setTab] = useState('review')
   return (
     <div>
-      <h1 className="text-2xl font-extrabold mb-3">Review & Rating Online</h1>
+      <h1 className="text-2xl font-extrabold mb-3">Review & Rating Online Food Aggregator</h1>
       <div className="flex gap-2 mb-4"><Chip active={tab === 'review'} onClick={() => setTab('review')}>Review komplain</Chip><Chip active={tab === 'rating'} onClick={() => setTab('rating')}>Rating per outlet</Chip></div>
       {tab === 'review' ? <ReviewTab /> : <RatingTab />}
     </div>

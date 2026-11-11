@@ -11,17 +11,29 @@ PENANGGUNG_JAWAB = {
     "Belum Diatur": "CS Lead",
 }
 
+# group: dipakai untuk mengelompokkan pilihan di Catat Komplain & ringkasan per sumber di dashboard.
+# orderRequired: channel yang hampir selalu punya nomor pesanan → kolom No. Pesanan tampil di form utama.
 CHANNELS = [
-    {"name": "WhatsApp", "targetFrt": 5, "excellent": 2, "countInSla": True},
-    {"name": "Live Chat", "targetFrt": 5, "excellent": 2, "countInSla": True},
-    {"name": "IG DM", "targetFrt": 10, "excellent": 5, "countInSla": True},
-    {"name": "TikTok DM", "targetFrt": 10, "excellent": 5, "countInSla": True},
-    {"name": "Social Comment", "targetFrt": 15, "excellent": 10, "countInSla": True},
-    {"name": "Email", "targetFrt": 240, "excellent": 60, "countInSla": True},
-    {"name": "Marketplace Chat", "targetFrt": 5, "excellent": 2, "countInSla": True},
-    {"name": "CSAT Form", "targetFrt": 1440, "excellent": None, "countInSla": False},
-    {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False},
+    {"name": "WhatsApp", "targetFrt": 5, "excellent": 2, "countInSla": True, "group": "Chat & Sosmed"},
+    {"name": "Live Chat", "targetFrt": 5, "excellent": 2, "countInSla": True, "group": "Chat & Sosmed"},
+    {"name": "IG DM", "targetFrt": 10, "excellent": 5, "countInSla": True, "group": "Chat & Sosmed"},
+    {"name": "TikTok DM", "targetFrt": 10, "excellent": 5, "countInSla": True, "group": "Chat & Sosmed"},
+    {"name": "Social Comment", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Chat & Sosmed"},
+    {"name": "Email", "targetFrt": 240, "excellent": 60, "countInSla": True, "group": "Chat & Sosmed"},
+    {"name": "Marketplace Chat", "targetFrt": 5, "excellent": 2, "countInSla": True, "group": "Marketplace (Frozen)",
+     "orderRequired": True},
+    # Online Food Aggregator — target awal 15 menit (asumsi; sesuaikan di Pengaturan → Target & SLA)
+    {"name": "GoFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
+     "orderRequired": True},
+    {"name": "GrabFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
+     "orderRequired": True},
+    {"name": "ShopeeFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
+     "orderRequired": True},
+    {"name": "CSAT Form", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Sistem"},
+    {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Sistem"},
 ]
+
+REVIEW_PLATFORMS = ["GoFood", "GrabFood", "ShopeeFood"]
 
 TIPE = ["Komplain", "Inquiry", "Advice and Suggestion"]
 

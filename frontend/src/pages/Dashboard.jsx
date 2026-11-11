@@ -205,9 +205,12 @@ export function DashboardBody({ d, meeting }) {
         </div>
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Channel" insight={d.insights.channel}>
-          <table className="w-full text-sm"><thead className="text-left text-mute"><tr>{['Channel', 'Case', 'FRT rata-rata', '% SLA'].map((h) => <th key={h} className="py-1 font-semibold">{h}</th>)}</tr></thead>
-            <tbody>{d.channels.map((r) => <tr key={r.name} className="border-t border-line tabnum"><td className="py-1.5">{r.name}</td><td>{r.count}</td><td>{fmtMin(r.avgFrt)}</td><td>{fmtPct(r.slaResponse)}</td></tr>)}</tbody></table>
+        <ChartCard title="Sumber komplain (channel)" insight={d.insights.channel}>
+          {d.sourceGroups?.length > 0 && <div className="flex flex-wrap gap-2 mb-3">{d.sourceGroups.map((g) => (
+            <div key={g.name} className="rounded-xl bg-cream px-3 py-2"><div className="text-xs text-mute">{g.name}</div><div className="font-bold tabnum">{g.count} <span className="text-xs font-normal text-mute">({fmtPct(g.pct)})</span></div></div>
+          ))}</div>}
+          <table className="w-full text-sm"><thead className="text-left text-mute"><tr>{['Channel', 'Kelompok', 'Case', 'FRT rata-rata', '% SLA'].map((h) => <th key={h} className="py-1 font-semibold">{h}</th>)}</tr></thead>
+            <tbody>{d.channels.map((r) => <tr key={r.name} className="border-t border-line tabnum"><td className="py-1.5">{r.name}</td><td className="text-xs text-mute">{r.group}</td><td>{r.count}</td><td>{fmtMin(r.avgFrt)}</td><td>{fmtPct(r.slaResponse)}</td></tr>)}</tbody></table>
         </ChartCard>
         <ChartCard title="Kompensasi" insight={d.insights.kompensasi}>
           <table className="w-full text-sm"><thead className="text-left text-mute"><tr>{['Bentuk', 'Case', 'Biaya'].map((h) => <th key={h} className="py-1 font-semibold">{h}</th>)}</tr></thead>

@@ -64,7 +64,7 @@ async def masters(u=Depends(current_user)):
         "targets": ctx["targets"], "settings": ctx["settings"], "penanggungJawab": ctx["pj"],
         "resolutionTarget": ctx["resTarget"], "criticalFrt": ctx["criticalFrt"],
         "outlets": sorted([clean(x) for x in ctx["outlets"].values()], key=lambda x: x["name"]),
-        "picDept": S.PIC_DEPT, "tipe": S.TIPE, "areas": S.AREAS, "voucherJenis": S.VOUCHER_JENIS,
+        "picDept": S.PIC_DEPT, "tipe": S.TIPE, "reviewPlatforms": S.REVIEW_PLATFORMS, "areas": S.AREAS, "voucherJenis": S.VOUCHER_JENIS,
         "brands": sorted({o.get("brand") or "Cimol Bojot AA" for o in ctx["outlets"].values()}),
         "agents": sorted({u2["name"] async for u2 in db.users.find({"active": True})}),
     }
@@ -384,7 +384,9 @@ async def add_review(body: ReviewIn, u=Depends(require(*WRITERS))):
     ctx = await load_ctx()
     o = ctx["outlets"].get(body.outletId)
     n = await db.reviews.count_documents({"platform": body.platform})
-    prefix = "GF" if body.platform == "GoFood" else "GR"
+    if body.platform not in S.REVIEW_PLATFORMS:
+        raise HTTPException(400, "Platform tidak dikenal.")
+    prefix = {"GoFood": "GF", "GrabFood": "GR", "ShopeeFood": "SF"}[body.platform]
     r = {"id": f"{prefix}-{n + 1:03d}-{new_id()[:4]}", **body.model_dump(), "tanggal": parse_iso(body.tanggal),
          "outletName": o["name"] if o else None, "klasifikasiSumber": "Input manual"}
     await prep_review(r, ctx)

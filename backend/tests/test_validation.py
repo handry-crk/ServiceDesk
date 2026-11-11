@@ -278,3 +278,32 @@ def test_compare_week_month(ctx):
     assert p[-1]["from"] == "2026-11-09" and p[-1]["to"] == "2026-11-15" and p[0]["from"] == "2026-10-19"
     assert all(len(s["counts"]) == 4 for s in w["subJenis"])
     assert c.get("/api/dashboard/compare", params={"mode": "year"}, headers=H).status_code == 400
+
+
+def test_food_aggregator_channels(ctx):
+    c, H, o = ctx
+    import asyncio
+    from app import services
+    db = core.get_db()
+    # simulasi database lama: channel GoFood belum ada & target WhatsApp sudah diubah CS Lead
+    async def legacy():
+        await db.channels.delete_many({"name": {"$in": ["GoFood", "GrabFood", "ShopeeFood"]}})
+        await db.channels.update_one({"name": "WhatsApp"}, {"$set": {"targetFrt": 3}, "$unset": {"group": ""}})
+        await services.seed_if_empty()
+    asyncio.run(legacy())
+    ch = {x["name"]: x for x in c.get("/api/masters", headers=H).json()["channels"]}
+    assert {"GoFood", "GrabFood", "ShopeeFood"} <= set(ch)
+    assert ch["WhatsApp"]["targetFrt"] == 3 and ch["WhatsApp"]["group"] == "Chat & Sosmed"
+    assert ch["GoFood"]["orderRequired"] and ch["GoFood"]["group"] == "Online Food Aggregator"
+    k = mk(c, H, o, channel="ShopeeFood", subJenis="Missing Item", orderNo="SF-0001").json()
+    assert k["channel"] == "ShopeeFood" and k["targetFrtMin"] == 15
+    r = c.post("/api/reviews", json={"platform": "ShopeeFood", "tanggal": wib_iso(2026, 11, 10, 12, 0), "outletId": o["Jagakarsa"],
+                                     "rating": 2, "review": "kurang", "subJenis": "Missing Item"}, headers=H).json()
+    assert r["id"].startswith("SF-")
+    assert c.post("/api/reviews", json={"platform": "Tokopedia", "tanggal": wib_iso(2026, 11, 10, 12, 0), "outletId": o["Jagakarsa"],
+                                        "rating": 2, "review": "x", "subJenis": "Missing Item"}, headers=H).status_code == 400
+    today = datetime.now(WIB).date().isoformat()
+    d = c.get("/api/dashboard", params={"from": today, "to": today}, headers=H).json()
+    g = {x["name"]: x["count"] for x in d["sourceGroups"]}
+    assert g.get("Online Food Aggregator", 0) >= 1
+    assert next(x for x in d["channels"] if x["name"] == "ShopeeFood")["group"] == "Online Food Aggregator"

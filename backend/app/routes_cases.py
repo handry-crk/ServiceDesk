@@ -464,6 +464,12 @@ async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None):
     subj = breakdown(komplain, "subJenis", lambda n, cs: {
         "jenis": (ctx["subJenis"].get(n) or {}).get("jenis"), "levelStandard": (ctx["subJenis"].get(n) or {}).get("level")})
     channels = breakdown(cases, "channel")
+    grp = {n: (c.get("group") or "Lainnya") for n, c in ctx["channels"].items()}
+    for c in cases:
+        c["_srcGroup"] = grp.get(c.get("channel"), "Lainnya")
+    sourceGroups = breakdown(cases, "_srcGroup")
+    for r in channels:
+        r["group"] = grp.get(r["name"], "Lainnya")
     pic = breakdown(komplain, "picDept")
     outlets = breakdown(komplain, "outletName", lambda n, cs: {
         "topSub": max(((s, sum(1 for c in cs if c.get("subJenis") == s)) for s in {c.get("subJenis") for c in cs}),
@@ -475,7 +481,7 @@ async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None):
     return {
         "period": {"from": frm, "to": to, "prevFrom": pf.isoformat(), "prevTo": pt.isoformat(), "totalTrx": trx},
         "metrics": m, "prev": pm, "volume": vol, "prevVolume": pvol, "table": table, "targets": targets,
-        "levels": levels, "jenis": jenis, "subJenis": subj, "channels": channels, "picDept": pic,
+        "levels": levels, "jenis": jenis, "subJenis": subj, "channels": channels, "sourceGroups": sourceGroups, "picDept": pic,
         "outlets": outlets, "kompensasi": komp, "hours": hours, "weeks": weeks,
         "insights": insights(cases, m, vol, hours, subj, channels),
     }

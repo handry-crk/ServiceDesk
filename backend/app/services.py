@@ -22,6 +22,17 @@ async def seed_if_empty():
         await db.sub_jenis.insert_many([dict(x) for x in S.SUB_JENIS])
     if await db.channels.count_documents({}) == 0:
         await db.channels.insert_many([dict(x, order=i) for i, x in enumerate(S.CHANNELS)])
+    else:
+        # migrasi: tambah channel baru (mis. GoFood/GrabFood/ShopeeFood) & isi group/orderRequired
+        # tanpa mengubah target yang sudah diatur CS Lead
+        for i, ch in enumerate(S.CHANNELS):
+            cur = await db.channels.find_one({"name": ch["name"]})
+            if not cur:
+                await db.channels.insert_one(dict(ch, order=i))
+            else:
+                fill = {k: ch[k] for k in ("group", "orderRequired") if k in ch and k not in cur}
+                fill["order"] = i
+                await db.channels.update_one({"name": ch["name"]}, {"$set": fill})
     if await db.kompensasi.count_documents({}) == 0:
         await db.kompensasi.insert_many([dict(x, order=i) for i, x in enumerate(S.KOMPENSASI)])
     for key, val, extra in (("targets", S.TARGETS, {}), ("settings", S.SETTINGS, {}),

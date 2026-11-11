@@ -5,7 +5,13 @@ from statistics import mean
 
 from .core import as_utc, wib, wib_date, now, WIB, get_db
 
-CRITICAL_COST_RC = {"Kontaminasi", "Keracunan", "Undercooked", "Penurunan Mutu (tidak dapat dikonsumsi)"}
+# CRM.STD.001 5.1: benda asing, potensi keracunan, tidak matang → Factory/Operasional sesuai root cause
+CRITICAL_COST_RC = {"Kontaminasi", "Keracunan", "Undercooked"}
+CC_ROOT = "Factory/Operasional (cek root cause)"
+
+
+def needs_cost_final(c):
+    return c.get("level") == "Critical" and c.get("costCenter") == CC_ROOT
 
 
 async def load_ctx():
@@ -83,7 +89,9 @@ def compute_case(c: dict, ctx: dict) -> dict:
     elif lvl == "Major":
         cc = "Team Frozen" if frozen else "Operasional"
     elif lvl == "Critical":
-        cc = "Factory/Operasional (tentukan setelah root cause)" if sname in CRITICAL_COST_RC else "Operasional"
+        # spoiled product frozen ikut dicek ke Factory (sama dengan sheet lama)
+        spoiled_frozen = frozen and sname == "Penurunan Mutu (tidak dapat dikonsumsi)"
+        cc = CC_ROOT if (sname in CRITICAL_COST_RC or spoiled_frozen) else "Operasional"
     else:
         cc = "Belum Diatur"
     c["costCenter"] = cc
@@ -163,8 +171,7 @@ def data_issues(c, pj_auto):
         iss.append("Resolved tanpa root cause")
     if c.get("waktuClosed") and c.get("followUpUlang") not in ("Y", "N"):
         iss.append("Closed tanpa Follow-up Y/N")
-    if c.get("level") == "Critical" and c.get("subJenis") in CRITICAL_COST_RC and c.get("waktuClosed") \
-            and not c.get("costCenterFinal") and c.get("source") != "import":
+    if needs_cost_final(c) and c.get("waktuClosed") and not c.get("costCenterFinal") and c.get("source") != "import":
         iss.append("Critical tanpa cost center final")
     if c.get("possibleDuplicateOf"):
         iss.append("Mungkin duplikat " + c["possibleDuplicateOf"])

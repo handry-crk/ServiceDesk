@@ -50,6 +50,9 @@ async def seed_if_empty():
             "pinHash": hash_pin(Config.DEFAULT_ADMIN_PIN), "failedPins": 0, "lockedUntil": None, "active": True,
             "role": "Admin"}})
         log.warning("RESET_ADMIN_PIN=true: PIN 'Admin' direset ke DEFAULT_ADMIN_PIN. Hapus variable ini setelah login.")
+    # migrasi: review hasil impor versi awal jangan membanjiri Inbox
+    await db.reviews.update_many({"klasifikasiSumber": {"$ne": "Input manual"}, "triage": {"$exists": False}},
+                                 {"$set": {"triage": "tidak_perlu"}})
     for coll, keys in (("cases", ["caseId", "tanggalMasuk", "status", "outletId", "subJenis", "surveyToken"]),
                        ("sessions", ["token"]), ("vouchers", ["kode", "status"]), ("csat", ["id", "timestamp"]),
                        ("reviews", ["id"]), ("events", ["caseId"])):

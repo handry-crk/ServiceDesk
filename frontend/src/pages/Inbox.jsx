@@ -70,8 +70,9 @@ export default function Inbox() {
           action={writer && <Btn kind="soft" className="w-full" onClick={() => nav(`/case/${c.caseId}?aksi=resolve`)}>Selesai (Resolved)…</Btn>} />)}
       </Section>
 
-      <Section title="Menunggu konfirmasi customer" count={data.resolved.length}>
+      <Section title="Menunggu konfirmasi customer" count={data.resolved.length + (data.resolvedOlder || 0)}>
         {data.resolved.length === 0 && <Empty>Tidak ada.</Empty>}
+        {data.resolvedOlder > 0 && <Link to="/case?status=Resolved" className="md:col-span-2 text-sm text-brick underline">{data.resolvedOlder} case Resolved lebih dari 14 hari belum di-Closed — lihat di menu Case</Link>}
         {data.resolved.map((c) => <CaseCard key={c.caseId} c={c} now={now}
           action={writer && <Btn kind="ghost" className="w-full" onClick={() => nav(`/case/${c.caseId}?aksi=close`)}>Closed (customer confirm)…</Btn>} />)}
       </Section>

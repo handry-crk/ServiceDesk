@@ -122,6 +122,12 @@ async def backup():
     return path
 
 
+async def nightly_recompute():
+    """Simpan ulang kolom otomatis (Same-Day case open, Cek Data) agar list & export ikut terbaru."""
+    from .services import recompute_all
+    await recompute_all()
+
+
 def start_scheduler():
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     s = AsyncIOScheduler(timezone="Asia/Jakarta")
@@ -130,5 +136,6 @@ def start_scheduler():
     s.add_job(weekly_recap, "cron", day_of_week="mon", hour=8, minute=30, id="weekly")
     s.add_job(voucher_expiry, "cron", hour=0, minute=10, id="voucher")
     s.add_job(backup, "cron", day_of_week="sun", hour=2, minute=0, id="backup")
+    s.add_job(nightly_recompute, "cron", hour=0, minute=20, id="recompute")
     s.start()
     return s

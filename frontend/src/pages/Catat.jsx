@@ -34,7 +34,7 @@ export default function Catat() {
   const pj = masters?.penanggungJawab?.[level] || '-'
   const tfrt = level === 'Critical' ? Math.min(ch?.targetFrt || 5, masters?.criticalFrt || 30) : ch?.targetFrt
   const frozen = outlet?.type === 'online_frozen'
-  const cc = !level ? '-' : level === 'Minor' ? (frozen && subJenis === 'Kesalahan Kemasan' ? 'Factory' : 'Operasional') : level === 'Major' ? (frozen ? 'Team Frozen' : 'Operasional') : level === 'Critical' ? (['Kontaminasi', 'Keracunan', 'Undercooked', 'Penurunan Mutu (tidak dapat dikonsumsi)'].includes(subJenis) ? 'Factory/Operasional (setelah root cause)' : 'Operasional') : 'Belum Diatur'
+  const cc = !level ? '-' : level === 'Minor' ? (frozen && subJenis === 'Kesalahan Kemasan' ? 'Factory' : 'Operasional') : level === 'Major' ? (frozen ? 'Team Frozen' : 'Operasional') : level === 'Critical' ? ((['Kontaminasi', 'Keracunan', 'Undercooked'].includes(subJenis) || (frozen && subJenis === 'Penurunan Mutu (tidak dapat dikonsumsi)')) ? 'Factory/Operasional (cek root cause)' : 'Operasional') : 'Belum Diatur'
   const sla = { Minor: '1 hari', Major: '2 hari', Critical: '3 hari' }[level] || 'belum diatur'
 
   if (!can(...WRITERS)) return <ErrorBox error={{ message: 'Peran Anda tidak bisa mencatat case.' }} />

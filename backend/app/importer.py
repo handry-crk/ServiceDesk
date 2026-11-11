@@ -221,6 +221,7 @@ async def import_workbook(data: bytes, dry_run=True, user=None):
                  "klasifikasiSumber": _s(_get(r, 7)), "tag": _s(_get(r, 8)), "orderNo": _s(_get(r, 9)),
                  "statusTindakLanjut": _s(_get(r, 10)) or "Belum diproses"}
             await prep_review(x, ctx)
+            x["triage"] = "tidak_perlu"  # review lama: tindak lanjut lewat menu Review, tidak membanjiri Inbox
             if not dry_run:
                 await db.reviews.insert_one(x)
             report["reviews"]["imported"] += 1

@@ -26,13 +26,22 @@ def out_case(c, u):
     return d
 
 
+def check_area(u, c):
+    if u["role"] == "Manager Area" and c.get("area") not in (u.get("areas") or []):
+        raise HTTPException(403, "Case ini di luar area Anda.")
+
+
 def area_filter(u, q):
     if u["role"] == "Manager Area":
         q["area"] = {"$in": u.get("areas") or ["-"]}
     return q
 
 
-async def cases_in_period(frm: str, to: str, u=None, brand=None, area=None):
+async def cases_in_period(frm: str, to: str, u=None, brand=None, area=None, ctx=None):
+    """Kolom otomatis dihitung ulang saat dibaca, supaya Same-Day case yang masih open
+    dan perubahan target/standard selalu ikut terbaru."""
+    from .logic import compute_case
+    ctx = ctx or await load_ctx()
     q = {"tanggalMasuk": {"$gte": frm, "$lte": to}}
     if brand:
         q["brand"] = brand
@@ -40,7 +49,7 @@ async def cases_in_period(frm: str, to: str, u=None, brand=None, area=None):
         q["area"] = area
     if u:
         area_filter(u, q)
-    return [c async for c in get_db().cases.find(q)]
+    return [compute_case(c, ctx) async for c in get_db().cases.find(q)]
 
 
 # ------------------------------------------------------------------ create
@@ -116,7 +125,7 @@ async def list_cases(u=Depends(current_user), frm: Optional[str] = Query(None, a
                      subJenis: Optional[str] = None, channel: Optional[str] = None, outletId: Optional[str] = None,
                      area: Optional[str] = None, picDept: Optional[str] = None, kompensasi: Optional[str] = None,
                      luarStandard: bool = False, dataIssue: bool = False, agent: Optional[str] = None,
-                     q: Optional[str] = None, limit: int = 500):
+                     q: Optional[str] = None, limit: int = 3000):
     qq = {}
     if frm or to:
         qq["tanggalMasuk"] = {"$gte": frm or "0000", "$lte": to or "9999"}
@@ -142,8 +151,7 @@ async def list_cases(u=Depends(current_user), frm: Optional[str] = Query(None, a
 @router.get("/cases/{case_id}")
 async def get_case(case_id: str, u=Depends(current_user)):
     c = await get_case_or_404(case_id)
-    if u["role"] == "Manager Area" and c.get("area") not in (u.get("areas") or []):
-        raise HTTPException(403, "Case ini di luar area Anda.")
+    check_area(u, c)
     ev = [clean(e) async for e in get_db().events.find({"caseId": case_id}).sort("at", 1)]
     d = out_case(c, u)
     d["events"] = ev
@@ -177,6 +185,7 @@ class PatchIn(BaseModel):
 @router.patch("/cases/{case_id}")
 async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
     c = await get_case_or_404(case_id)
+    check_area(u, c)
     data = body.model_dump(exclude_none=True)
     limited = {"rootCause", "notes", "costCenterFinal"}
     if u["role"] in ("Manager Area", "Ops/QC"):
@@ -266,8 +275,8 @@ async def close(case_id: str, body: CloseIn, u=Depends(require(*WRITERS))):
         raise HTTPException(400, "Pilih Y atau N untuk 'Customer follow-up ulang?'.")
     if body.costCenterFinal:
         c["costCenterFinal"] = body.costCenterFinal
-    from .logic import CRITICAL_COST_RC
-    if c.get("level") == "Critical" and c.get("subJenis") in CRITICAL_COST_RC and not c.get("costCenterFinal"):
+    from .logic import needs_cost_final
+    if needs_cost_final(c) and not c.get("costCenterFinal"):
         raise HTTPException(400, "Case Critical ini butuh cost center final (Factory atau Operasional) sebelum Closed.")
     c.update(followUpUlang=body.followUpUlang, waktuClosed=now(), status="Closed")
     await save_case(c)
@@ -291,7 +300,7 @@ async def reopen(case_id: str, body: dict, u=Depends(require(*WRITERS))):
 
 @router.post("/cases/{case_id}/note")
 async def note(case_id: str, body: dict, u=Depends(require("Admin", "CS Lead", "CS Agent", "Manager Area", "Ops/QC"))):
-    await get_case_or_404(case_id)
+    check_area(u, await get_case_or_404(case_id))
     t = (body.get("text") or "").strip()
     if not t:
         raise HTTPException(400, "Catatan kosong.")
@@ -393,10 +402,16 @@ async def inbox(u=Depends(current_user)):
 
     rows.sort(key=urgency)
     sec = {"open": [], "responded": [], "resolved": []}
+    resolved_older = 0
     for c in rows:
+        if c["status"] == "Resolved" and c.get("waktuResolved") and \
+                (t - as_utc(c["waktuResolved"])).days > 14:
+            resolved_older += 1  # menunggu konfirmasi > 14 hari: tidak ditampilkan di Inbox
+            continue
         d = out_case(c, u)
         d["ageMin"] = round((t - as_utc(c["waktuMasuk"])).total_seconds() / 60)
         sec[c["status"].lower()].append(d)
+    sec["resolvedOlder"] = resolved_older
     csat = [clean(x) async for x in db.csat.find({"triage": "belum", "needsTriage": True}).sort("timestamp", -1).limit(50)]
     reviews = [clean(x) async for x in db.reviews.find({"needsTriage": True, "linkedCaseId": None,
                                                         "triage": {"$ne": "tidak_perlu"}}).sort("tanggal", -1).limit(50)]
@@ -431,13 +446,13 @@ async def total_trx(frm: date, to: date):
 async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None):
     ctx = await load_ctx()
     targets = ctx["targets"]
-    cases = await cases_in_period(frm, to, u, brand, area)
+    cases = await cases_in_period(frm, to, u, brand, area, ctx)
     f, t = date.fromisoformat(frm), date.fromisoformat(to)
     trx = await total_trx(f, t)
     m, vol, table = compute_metrics(cases, targets, trx)
     span = (t - f).days + 1
     pf, pt = f - timedelta(days=span), f - timedelta(days=1)
-    prev_cases = await cases_in_period(pf.isoformat(), pt.isoformat(), u, brand, area)
+    prev_cases = await cases_in_period(pf.isoformat(), pt.isoformat(), u, brand, area, ctx)
     pm, pvol, _ = compute_metrics(prev_cases, targets)
     komplain = [c for c in cases if c.get("tipe", "Komplain") == "Komplain"]
     levels = breakdown(komplain, "level")

@@ -5,7 +5,7 @@ import { Btn, Card, Chip, Field, Sheet, Skeleton, ErrorBox, LevelBadge, StatusBa
 import { SlaChip, useNow, Combo, levelItemBadge } from '../components.jsx'
 
 const EV = { created: 'Case dibuat', responded: 'Sudah dibalas', resolved: 'Resolved', closed: 'Closed', reopened: 'Dibuka ulang', note: 'Catatan', level_changed: 'Level diubah', time_corrected: 'Waktu dikoreksi', voucher_issued: 'Voucher diterbitkan', edited: 'Data diubah', csat: 'CSAT customer' }
-const CRIT_CC = ['Kontaminasi', 'Keracunan', 'Undercooked', 'Penurunan Mutu (tidak dapat dikonsumsi)']
+const CC_ROOT = 'Factory/Operasional (cek root cause)'
 
 const copy = async (t, notify, msg = 'Tersalin') => { try { await navigator.clipboard.writeText(t); notify(msg) } catch { notify('Gagal menyalin', 'err') } }
 
@@ -142,7 +142,8 @@ function VoucherMsg({ c, notify, masters }) {
 
 function ResolveSheet({ open, onClose, c, masters, onDone }) {
   const sj = masters?.subJenis.find((s) => s.name === c.subJenis)
-  const komp = useMemo(() => (masters?.kompensasi || []).filter((k) => k.level === c.level || k.level === 'Semua').sort((a, b) => (b.standard ? 1 : 0) - (a.standard ? 1 : 0)), [masters, c.level])
+  // Level Belum Diatur (mis. Delivery / Ekspedisi): semua pilihan ditampilkan, ditandai di luar standard
+  const komp = useMemo(() => (masters?.kompensasi || []).filter((k) => !c.level || k.level === c.level || k.level === 'Semua').sort((a, b) => (b.standard ? 1 : 0) - (a.standard ? 1 : 0)), [masters, c.level])
   const [rc, setRc] = useState(c.rootCause || '')
   const [pic, setPic] = useState(c.picDept || '')
   const [k, setK] = useState('')
@@ -162,7 +163,7 @@ function ResolveSheet({ open, onClose, c, masters, onDone }) {
             {komp.map((x) => (
               <button type="button" key={x.key} onClick={() => { setK(x.key); setNilai(x.nilai || '') }}
                 className={`text-left rounded-xl border px-3 py-2.5 ${k === x.key ? 'border-brick bg-brick-soft' : 'border-line'}`}>
-                <div className="font-semibold text-sm flex items-center gap-2">{x.label}{!x.standard && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FBE3C8] text-[#8A4B00] font-bold">Di luar standard</span>}</div>
+                <div className="font-semibold text-sm flex items-center gap-2">{x.label}{(!x.standard || !c.level) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FBE3C8] text-[#8A4B00] font-bold">Di luar standard</span>}</div>
                 {x.voucherJenis && <div className="text-xs text-mute">Kode {x.voucherJenis} berikutnya otomatis dipakai</div>}
               </button>
             ))}
@@ -178,7 +179,7 @@ function ResolveSheet({ open, onClose, c, masters, onDone }) {
 function CloseSheet({ open, onClose, c, onDone }) {
   const [fu, setFu] = useState('')
   const [cc, setCc] = useState(c.costCenterFinal || '')
-  const needCC = c.level === 'Critical' && CRIT_CC.includes(c.subJenis)
+  const needCC = c.level === 'Critical' && c.costCenter === CC_ROOT
   return (
     <Sheet open={open} onClose={onClose} title={`Close ${c.caseId}`}>
       <div className="space-y-4">

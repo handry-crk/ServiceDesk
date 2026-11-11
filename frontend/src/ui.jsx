@@ -62,7 +62,7 @@ export function Sheet({ open, onClose, title, children, wide }) {
 export const Info = ({ text }) => (
   <span className="relative group inline-flex align-middle ml-1">
     <span className="w-4 h-4 rounded-full border border-mute text-mute text-[10px] flex items-center justify-center cursor-help">i</span>
-    <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-6 w-56 rounded-lg bg-ink text-white text-xs p-2 opacity-0 group-hover:opacity-100 z-20 font-normal">{text}</span>
+    <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-6 w-56 max-w-[70vw] rounded-lg bg-ink text-white text-xs p-2 hidden group-hover:block z-20 font-normal">{text}</span>
   </span>
 )
 

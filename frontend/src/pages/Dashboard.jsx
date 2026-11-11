@@ -32,7 +32,9 @@ export function Headline({ d }) {
     { k: 'frt', label: 'FRT rata-rata', v: d.metrics.frt === null ? '–' : `${fmtNum(d.metrics.frt)} mnt`, sub: `Jam kerja: ${d.metrics.frtWork === null ? '–' : fmtNum(d.metrics.frtWork) + ' mnt'}` },
     { k: 'slaResponse', label: '% SLA Response', v: fmtPct(d.metrics.slaResponse) },
     { k: 'sameDay', label: '% Same-Day Resolution', v: fmtPct(d.metrics.sameDay) },
-    { k: 'csat', label: 'CSAT (% puas)', v: fmtPct(d.metrics.csat) },
+    { k: 'csat', label: 'CSAT komplain (% puas)', v: fmtPct(d.metrics.csat),
+      sub: d.metrics.csatN ? `${d.metrics.csatN} rating · respons ${fmtPct(d.metrics.csatResponse)} dari ${d.metrics.csatSent} survei terkirim` : (d.metrics.csatSent ? `${d.metrics.csatSent} survei terkirim, belum ada jawaban` : 'Belum ada survei case terkirim'),
+      extra: { label: 'CSAT outlet (form)', v: fmtPct(d.metrics.csatOutlet), n: d.metrics.csatOutletN, prev: d.prev?.csatOutlet } },
   ]
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -49,6 +51,11 @@ export function Headline({ d }) {
               <StatusPill status={row?.status} />
             </div>
             <div className="mt-1"><Delta cur={d.metrics[t.k]} prev={d.prev[t.k]} dir={tg.dir} isPct={t.k !== 'frt'} /></div>
+            {t.extra && <div className="mt-3 pt-3 border-t border-line">
+              <div className="text-xs text-mute font-semibold">{t.extra.label}<Info text="Rating keseluruhan 4–5 dari form survei outlet (pembeli umum di gerobak), bukan dari customer yang komplain." /></div>
+              <div className="flex items-baseline gap-2"><span className="text-xl font-extrabold tabnum">{t.extra.v}</span><span className="text-xs text-mute">{t.extra.n ? `${t.extra.n} respons` : 'belum ada respons'}</span></div>
+              <Delta cur={d.metrics.csatOutlet} prev={t.extra.prev} dir="min" isPct />
+            </div>}
           </Card>
         )
       })}

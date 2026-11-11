@@ -140,3 +140,16 @@ export async function compressImage(file, maxW = 1280, quality = 0.7) {
   do { blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', q)); q -= 0.1 } while (blob.size > 300_000 && q > 0.3)
   return blob
 }
+
+// ---------------- WhatsApp ----------------
+/** Nomor HP Indonesia → format wa.me (628…). null bila tidak valid. */
+export function waNumber(phone) {
+  let d = String(phone || '').replace(/\D/g, '')
+  if (d.startsWith('0')) d = '62' + d.slice(1)
+  else if (d.startsWith('8')) d = '62' + d
+  return /^62\d{8,13}$/.test(d) ? d : null
+}
+export const waLink = (phone, text) => `https://wa.me/${waNumber(phone)}?text=${encodeURIComponent(text)}`
+export const surveyMessage = (c, url) =>
+  `Halo Kak${c.customerName ? ' ' + c.customerName : ''}, terima kasih sudah menyampaikan keluhan ke ${c.brand || 'Cimol Bojot AA'} 🙏\n\n` +
+  `Boleh bantu nilai penanganan keluhan Kakak? Cukup 1 klik (kurang dari 10 detik):\n${url}\n\nMasukan Kakak membantu kami jadi lebih baik.`

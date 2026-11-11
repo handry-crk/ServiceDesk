@@ -225,6 +225,10 @@ def compute_metrics(cases, targets, total_trx=None):
                              len(valid)),
         "reopen": _rate(sum(1 for c in closed if (c.get("reopenCount") or 0) > 0), len(closed)) if closed else None,
         "csat": _rate(sum(1 for c in rated if c["puas"]), len(rated)),
+        "csatN": len(rated),
+        "csatSent": sum(1 for c in contact if c.get("surveySentAt")),
+        "csatResponse": _rate(sum(1 for c in contact if c.get("surveySentAt") and c.get("puas") is not None),
+                              sum(1 for c in contact if c.get("surveySentAt"))),
     }
     biaya = sum(c.get("nilaiKompensasi") or 0 for c in komplain)
     biaya_out = sum(c.get("nilaiKompensasi") or 0 for c in komplain if c.get("kompensasiOutsideStandard"))

@@ -122,6 +122,11 @@ export default function Catat() {
             <input className={inputCls} value={extra.orderNo} onChange={(e) => setExtra({ ...extra, orderNo: e.target.value.trim() })} placeholder={channel === 'GoFood' ? 'F-1234567890' : channel === 'GrabFood' ? 'A-XXXXXXXX' : 'No. pesanan'} />
           </Field>
         )}
+        {channel === 'WhatsApp' && (
+          <Field label="No. WhatsApp customer" hint="Disarankan: dipakai untuk kirim survei CSAT dengan 1 klik setelah case Closed.">
+            <input className={inputCls} inputMode="tel" value={extra.customerPhone} onChange={(e) => setExtra({ ...extra, customerPhone: e.target.value })} placeholder="08xxxxxxxxxx" />
+          </Field>
+        )}
         <Field label="Waktu masuk" required>
           <div className="flex flex-wrap gap-2 items-center">
             <Chip active={!waktu} onClick={() => setWaktu(null)}>Sekarang</Chip>
@@ -138,7 +143,7 @@ export default function Catat() {
             <Field label="Tipe"><select className={inputCls} value={extra.tipe} onChange={(e) => setExtra({ ...extra, tipe: e.target.value })}>{masters?.tipe.map((t) => <option key={t}>{t}</option>)}</select></Field>
             {!orderRequired && <Field label="No. Pesanan"><input className={inputCls} value={extra.orderNo} onChange={(e) => setExtra({ ...extra, orderNo: e.target.value })} /></Field>}
             <Field label="Nama customer"><input className={inputCls} value={extra.customerName} onChange={(e) => setExtra({ ...extra, customerName: e.target.value })} /></Field>
-            <Field label="No. HP customer"><input className={inputCls} inputMode="tel" value={extra.customerPhone} onChange={(e) => setExtra({ ...extra, customerPhone: e.target.value })} /></Field>
+            {channel !== 'WhatsApp' && <Field label="No. HP customer"><input className={inputCls} inputMode="tel" value={extra.customerPhone} onChange={(e) => setExtra({ ...extra, customerPhone: e.target.value })} /></Field>}
             <Field label={`Foto bukti (${photos.length}/3)`}>
               <div className="flex gap-2 items-center flex-wrap">
                 {photos.map((p) => <img key={p} src={p} className="w-14 h-14 rounded-lg object-cover border border-line" alt="" />)}

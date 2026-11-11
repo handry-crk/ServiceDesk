@@ -341,3 +341,30 @@ def test_standard_text_migration(ctx):
     assert sj["Keracunan"]["contoh"] == "ditulis CS Lead"
     doc = c.get("/api/masters", headers=H).json()["standardDoc"]
     assert doc["code"] == "CRM.STD.001" and doc["effective"] == "2026-10-20" and len(doc["considerations"]) == 4
+
+
+def test_csat_complaint_and_outlet(ctx):
+    c, H, o = ctx
+    today = datetime.now(WIB).date().isoformat()
+    k = mk(c, H, o, subJenis="Hospitality", outletId=o["Pondok Rangon"], customerPhone="0812 3456 7890").json()
+    cid = k["caseId"]
+    c.post(f"/api/cases/{cid}/resolve", json={"rootCause": "x", "kompensasiKey": "min-apologize"}, headers=H)
+    c.post(f"/api/cases/{cid}/close", json={"followUpUlang": "N"}, headers=H)
+    d0 = c.get("/api/dashboard", params={"from": today, "to": today}, headers=H).json()["metrics"]
+    r = c.post(f"/api/cases/{cid}/survey-sent", json={"via": "whatsapp"}, headers=H).json()
+    assert r["surveySentVia"] == "whatsapp" and r["surveySentAt"]
+    d1 = c.get("/api/dashboard", params={"from": today, "to": today}, headers=H).json()["metrics"]
+    assert d1["csatSent"] == d0["csatSent"] + 1
+    tok = c.get(f"/api/cases/{cid}", headers=H).json()["surveyToken"]
+    c.post(f"/api/public/survey/{tok}", json={"rating": 5})
+    d2 = c.get("/api/dashboard", params={"from": today, "to": today}, headers=H).json()["metrics"]
+    assert d2["csatN"] == d1["csatN"] + 1 and d2["csat"] is not None and d2["csatResponse"] > 0
+    # CSAT outlet (form) terpisah dari CSAT komplain, ikut filter area
+    assert "csatOutlet" in d2 and d2["csatOutletN"] >= 1
+    bks = c.get("/api/dashboard", params={"from": today, "to": today, "area": "Bekasi"}, headers=H).json()["metrics"]
+    assert bks["csatOutletN"] < d2["csatOutletN"]
+    cmp = c.get("/api/dashboard/compare", params={"mode": "week", "n": 2}, headers=H).json()
+    assert "csatOutlet" in cmp["periods"][-1]["metrics"]
+    # viewer tidak boleh menandai survei terkirim
+    V = login(c, "Lihat", "123123")
+    assert c.post(f"/api/cases/{cid}/survey-sent", json={}, headers=V).status_code == 403

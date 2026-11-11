@@ -284,6 +284,19 @@ async def close(case_id: str, body: CloseIn, u=Depends(require(*WRITERS))):
     return out_case(c, u)
 
 
+@router.post("/cases/{case_id}/survey-sent")
+async def survey_sent(case_id: str, body: dict | None = None, u=Depends(require(*WRITERS))):
+    """Dicatat saat CS mengirim link survei CSAT (WhatsApp / salin), untuk menghitung tingkat respons survei."""
+    c = await get_case_or_404(case_id)
+    via = (body or {}).get("via") or "copy"
+    c["surveySentAt"] = now()
+    c["surveySentVia"] = via
+    c["surveySentCount"] = (c.get("surveySentCount") or 0) + 1
+    await save_case(c)
+    await add_event(case_id, "survey_sent", u, {"via": via})
+    return out_case(c, u)
+
+
 @router.post("/cases/{case_id}/reopen")
 async def reopen(case_id: str, body: dict, u=Depends(require(*WRITERS))):
     c = await get_case_or_404(case_id)
@@ -450,10 +463,15 @@ async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None):
     f, t = date.fromisoformat(frm), date.fromisoformat(to)
     trx = await total_trx(f, t)
     m, vol, table = compute_metrics(cases, targets, trx)
+    scope = outlet_scope(ctx, u, brand, area)
+    co = await csat_summary(frm, to, scope)
+    m["csatOutlet"], m["csatOutletN"] = co["puas"], co["rated"]
     span = (t - f).days + 1
     pf, pt = f - timedelta(days=span), f - timedelta(days=1)
     prev_cases = await cases_in_period(pf.isoformat(), pt.isoformat(), u, brand, area, ctx)
     pm, pvol, _ = compute_metrics(prev_cases, targets)
+    pco = await csat_summary(pf.isoformat(), pt.isoformat(), scope)
+    pm["csatOutlet"], pm["csatOutletN"] = pco["puas"], pco["rated"]
     komplain = [c for c in cases if c.get("tipe", "Komplain") == "Komplain"]
     levels = breakdown(komplain, "level")
     order = {"Minor": 0, "Major": 1, "Critical": 2}
@@ -494,6 +512,19 @@ async def dashboard(u=Depends(current_user), frm: str = Query(..., alias="from")
 
 
 BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+
+
+def outlet_scope(ctx, u=None, brand=None, area=None):
+    """Outlet yang ikut dihitung untuk CSAT outlet sesuai filter brand/area/peran. None = semua."""
+    areas = None
+    if u and u.get("role") == "Manager Area":
+        areas = set(u.get("areas") or [])
+    if area:
+        areas = {area} if areas is None else (areas & {area})
+    if areas is None and not brand:
+        return None
+    return [o["id"] for o in ctx["outlets"].values()
+            if (areas is None or o.get("area") in areas) and (not brand or (o.get("brand") or "Cimol Bojot AA") == brand)]
 
 
 def compare_periods(mode: str, n: int, end: date):
@@ -539,6 +570,7 @@ async def build_compare(mode="week", n=8, end=None, u=None, brand=None, area=Non
     ctx = await load_ctx()
     targets = ctx["targets"]
     allc = await cases_in_period(periods[0]["from"].isoformat(), end_d.isoformat(), u, brand, area, ctx)
+    scope = outlet_scope(ctx, u, brand, area)
     rows = []
     sub_counts = {}
     src_counts = {}
@@ -548,6 +580,8 @@ async def build_compare(mode="week", n=8, end=None, u=None, brand=None, area=Non
         cs = [c for c in allc if c.get("tanggalMasuk") and f <= c["tanggalMasuk"] <= t]
         trx = await total_trx(p["from"], p["toData"])
         m, vol, _ = compute_metrics(cs, targets, trx)
+        co = await csat_summary(f, t, scope)
+        m["csatOutlet"], m["csatOutletN"] = co["puas"], co["rated"]
         komplain = [c for c in cs if c.get("tipe", "Komplain") == "Komplain"]
         for c in komplain:
             k = c.get("subJenis") or "Belum Terklasifikasi"
@@ -742,10 +776,13 @@ async def review_summary(frm, to):
             "critical": sum(1 for r in rows if r.get("level") == "Critical")}
 
 
-async def csat_summary(frm, to):
-    rows = [r async for r in get_db().csat.find({"tanggal": {"$gte": frm, "$lte": to}})]
+async def csat_summary(frm, to, outlet_ids=None):
+    q = {"tanggal": {"$gte": frm, "$lte": to}}
+    if outlet_ids is not None:
+        q["outletId"] = {"$in": list(outlet_ids)}
+    rows = [r async for r in get_db().csat.find(q)]
     rated = [r for r in rows if isinstance(r.get("ratingKeseluruhan"), int)]
-    return {"count": len(rows),
+    return {"count": len(rows), "rated": len(rated),
             "puas": round(sum(1 for r in rated if r["ratingKeseluruhan"] >= 4) / len(rated), 4) if rated else None,
             "beliLagi": round(sum(1 for r in rows if r.get("beliLagi") == "Ya") / len(rows), 4) if rows else None,
             "avg": round(sum(r["ratingKeseluruhan"] for r in rated) / len(rated), 2) if rated else None}

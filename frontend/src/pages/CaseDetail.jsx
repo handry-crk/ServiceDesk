@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { api, useApp, useAsync, fmtDT, fmtMin, fmtRp, toLocalInput, fromLocalInput, WRITERS, LEAD } from '../lib.jsx'
+import { api, useApp, useAsync, fmtDT, fmtMin, fmtRp, toLocalInput, fromLocalInput, WRITERS, LEAD, waNumber, waLink, surveyMessage } from '../lib.jsx'
 import { Btn, Card, Chip, Field, Sheet, Skeleton, ErrorBox, LevelBadge, StatusBadge, inputCls } from '../ui.jsx'
 import { SlaChip, useNow, Combo, levelItemBadge } from '../components.jsx'
 
@@ -87,7 +87,10 @@ export default function CaseDetail() {
           <Row k="No. pesanan" v={c.orderNo} /><Row k="Nama" v={c.customerName} /><Row k="No. HP" v={c.customerPhone} />
           <Row k="CS agent" v={c.csAgent} /><Row k="Sumber" v={c.source} />
           {c.notes && <Row k="Catatan impor" v={c.notes} />}
-          {c.surveyToken && writer && <div className="mt-3 flex gap-2"><Btn size="sm" kind="soft" onClick={() => copy(`${location.origin}/survei/${c.surveyToken}`, notify, 'Link survei CSAT tersalin')}>Salin link survei CSAT</Btn></div>}
+          {c.surveyToken && writer && <div className="mt-3 space-y-1">
+            <Btn size="sm" kind={c.surveySentAt ? 'ghost' : 'soft'} onClick={() => setSheet('survey')}>{c.surveySentAt ? 'Kirim ulang survei CSAT' : 'Kirim survei CSAT'}</Btn>
+            {c.surveySentAt && <div className="text-xs text-mute">Survei terkirim {fmtDT(c.surveySentAt)} via {c.surveySentVia === 'whatsapp' ? 'WhatsApp' : 'salin pesan'}{c.csat ? ` · dijawab ${c.csat}/5` : ' · belum dijawab'}</div>}
+          </div>}
         </Card>
         <Card className="p-4">
           <h3 className="font-bold mb-2">Riwayat</h3>
@@ -117,7 +120,13 @@ export default function CaseDetail() {
       <Sheet open={sheet === 'voucher'} onClose={close} title="Voucher diterbitkan">
         {c.voucher && <VoucherMsg c={c} notify={notify} masters={masters} />}
       </Sheet>
-      <CloseSheet open={sheet === 'close'} onClose={close} c={c} onDone={(b) => act('close', b, 'Case closed')} />
+      <CloseSheet open={sheet === 'close'} onClose={close} c={c} onDone={async (b) => { const r = await act('close', b, 'Case closed'); if (r && writer) setSheet('survey') }} />
+      <SurveySheet open={sheet === 'survey'} onClose={close} c={c} notify={notify} onSent={async (via, phone) => {
+        try {
+          if (phone && phone !== c.customerPhone) await api('/cases/' + id, { method: 'PATCH', body: { customerPhone: phone } })
+          await api(`/cases/${id}/survey-sent`, { method: 'POST', body: { via } }); close(); reload()
+        } catch (e) { notify(e.message, 'err') }
+      }} />
       <SimpleSheet open={sheet === 'reopen'} onClose={close} title="Buka ulang case" label="Alasan dibuka ulang" onDone={(t) => act('reopen', { reason: t }, 'Case dibuka ulang')} />
       <SimpleSheet open={sheet === 'note'} onClose={close} title="Tambah catatan" label="Catatan" onDone={(t) => act('note', { text: t }, 'Catatan tersimpan')} />
       <LevelSheet open={sheet === 'level'} onClose={close} c={c} onDone={(b) => act('change-level', b, 'Level diubah')} />
@@ -125,6 +134,31 @@ export default function CaseDetail() {
       <EditSheet open={sheet === 'edit' || sheet === 'rootcause'} limited={sheet === 'rootcause' || limited} onClose={close} c={c} masters={masters}
         onDone={async (b) => { try { setData(await api('/cases/' + id, { method: 'PATCH', body: b })); notify('Tersimpan'); close(); reload() } catch (e) { notify(e.message, 'err') } }} />
     </div>
+  )
+}
+
+function SurveySheet({ open, onClose, c, notify, onSent }) {
+  const url = `${location.origin}/survei/${c.surveyToken}`
+  const [phone, setPhone] = useState(c.customerPhone || '')
+  const [msg, setMsg] = useState('')
+  useEffect(() => { if (open) { setPhone(c.customerPhone || ''); setMsg(surveyMessage(c, url)) } }, [open, c.customerPhone, c.customerName, url])
+  const wa = waNumber(phone)
+  return (
+    <Sheet open={open} onClose={onClose} title="Kirim survei CSAT ke customer">
+      <div className="space-y-4">
+        <p className="text-sm text-mute">Customer cukup sekali tap emoji 1–5. Hasilnya masuk ke CSAT komplain di dashboard.</p>
+        <Field label="No. WhatsApp customer" hint={phone && !wa ? 'Nomor tidak valid. Contoh: 0812xxxxxxx' : 'Diisi otomatis dari case; disimpan ke case bila diubah.'}>
+          <input className={inputCls} inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08xxxxxxxxxx" />
+        </Field>
+        <Field label="Pesan"><textarea className={inputCls + ' min-h-[150px] py-2 text-sm'} value={msg} onChange={(e) => setMsg(e.target.value)} /></Field>
+        <a href={wa ? waLink(phone, msg) : undefined} target="_blank" rel="noreferrer"
+          onClick={(e) => { if (!wa) { e.preventDefault(); return } onSent('whatsapp', phone) }}>
+          <Btn className="w-full" size="lg" kind="ok" disabled={!wa}>Kirim lewat WhatsApp</Btn>
+        </a>
+        <Btn className="w-full" kind="ghost" onClick={async () => { try { await navigator.clipboard.writeText(msg); notify('Pesan survei tersalin. Tempel di channel customer (IG DM, chat platform, dll).') } catch { notify('Gagal menyalin', 'err'); return } onSent('copy', phone) }}>Salin pesan (untuk IG DM, TikTok, chat platform)</Btn>
+        <button className="text-sm text-mute underline w-full" onClick={onClose}>Nanti saja</button>
+      </div>
+    </Sheet>
   )
 }
 

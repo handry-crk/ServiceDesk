@@ -23,7 +23,10 @@ const METRICS = [
   { key: 'fcr', label: 'First Contact Resolution', src: 'metrics', kind: 'pct', dir: 'min', group: 'Resolution', target: true, info: CARA_HITUNG.fcr },
   { key: 'compSuccess', label: 'Complimentary Success Rate', src: 'metrics', kind: 'pct', dir: 'min', group: 'Quality', target: true },
   { key: 'reopen', label: 'Reopen Rate', src: 'metrics', kind: 'pct', dir: 'max', group: 'Quality', target: true },
-  { key: 'csat', label: 'CSAT (% puas)', src: 'metrics', kind: 'pct', dir: 'min', group: 'Quality', target: true },
+  { key: 'csat', label: 'CSAT komplain (% puas)', src: 'metrics', kind: 'pct', dir: 'min', group: 'Quality', target: true },
+  { key: 'csatN', label: 'Rating survei case', src: 'metrics', kind: 'count', dir: 'min', group: 'Quality' },
+  { key: 'csatResponse', label: '% respons survei case', src: 'metrics', kind: 'pct', dir: 'min', group: 'Quality' },
+  { key: 'csatOutlet', label: 'CSAT outlet (form)', src: 'metrics', kind: 'pct', dir: 'min', group: 'Quality' },
 ]
 
 const val = (p, m) => p[m.src]?.[m.key] ?? null

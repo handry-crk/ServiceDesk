@@ -87,7 +87,7 @@ export default function CaseDetail() {
           <Row k="No. pesanan" v={c.orderNo} /><Row k="Nama" v={c.customerName} /><Row k="No. HP" v={c.customerPhone} />
           <Row k="CS agent" v={c.csAgent} /><Row k="Sumber" v={c.source} />
           {c.notes && <Row k="Catatan impor" v={c.notes} />}
-          {c.surveyUrl && writer && <div className="mt-3 flex gap-2"><Btn size="sm" kind="soft" onClick={() => copy(c.surveyUrl, notify, 'Link survei CSAT tersalin')}>Salin link survei CSAT</Btn></div>}
+          {c.surveyToken && writer && <div className="mt-3 flex gap-2"><Btn size="sm" kind="soft" onClick={() => copy(`${location.origin}/survei/${c.surveyToken}`, notify, 'Link survei CSAT tersalin')}>Salin link survei CSAT</Btn></div>}
         </Card>
         <Card className="p-4">
           <h3 className="font-bold mb-2">Riwayat</h3>

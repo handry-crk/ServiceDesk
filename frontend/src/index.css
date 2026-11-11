@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+html { -webkit-text-size-adjust: 100%; }
+body { font-family: "Plus Jakarta Sans", system-ui, sans-serif; }
+input, select, textarea { font-size: 16px; }
+.tabnum { font-variant-numeric: tabular-nums; }
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+  @page { size: A4 landscape; margin: 10mm; }
+  .print-break { break-before: page; }
+  .slide { min-height: auto !important; border: none !important; box-shadow: none !important; }
+}

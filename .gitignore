@@ -1,0 +1,9 @@
+node_modules/
+frontend/dist/
+backend/static/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+data/
+*.xlsx

@@ -1,0 +1,633 @@
+from datetime import date, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+
+from .auth import current_user, require, LEAD, WRITERS
+from .core import get_db, now, parse_iso, as_utc, clean, mask_phone, wib_date, Config
+from .logic import load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights
+from .services import (next_case_id, save_case, add_event, audit, find_duplicates, get_case_or_404,
+                       survey_token, issue_voucher, new_id)
+
+router = APIRouter(prefix="/api")
+
+
+# ------------------------------------------------------------------ helpers
+
+def can_see_phone(u):
+    return u["role"] in ("Admin", "CS Lead", "CS Agent")
+
+
+def out_case(c, u):
+    d = clean(c)
+    if not can_see_phone(u):
+        d["customerPhone"] = mask_phone(d.get("customerPhone"))
+    return d
+
+
+def area_filter(u, q):
+    if u["role"] == "Manager Area":
+        q["area"] = {"$in": u.get("areas") or ["-"]}
+    return q
+
+
+async def cases_in_period(frm: str, to: str, u=None, brand=None, area=None):
+    q = {"tanggalMasuk": {"$gte": frm, "$lte": to}}
+    if brand:
+        q["brand"] = brand
+    if area:
+        q["area"] = area
+    if u:
+        area_filter(u, q)
+    return [c async for c in get_db().cases.find(q)]
+
+
+# ------------------------------------------------------------------ create
+
+class CaseIn(BaseModel):
+    channel: str
+    outletId: str
+    subJenis: str
+    ringkasan: str
+    waktuMasuk: Optional[str] = None
+    brand: Optional[str] = None
+    tipe: Optional[str] = "Komplain"
+    orderNo: Optional[str] = None
+    customerName: Optional[str] = None
+    customerPhone: Optional[str] = None
+    photos: list[str] = []
+    source: Optional[str] = "manual"
+    sourceRefId: Optional[str] = None
+    force: bool = False
+
+
+@router.get("/cases/check-duplicate")
+async def check_dup(outletId: str, subJenis: str, waktuMasuk: Optional[str] = None, orderNo: Optional[str] = None,
+                    u=Depends(current_user)):
+    w = parse_iso(waktuMasuk) if waktuMasuk else now()
+    return {"duplicates": await find_duplicates(outletId, subJenis, w, orderNo)}
+
+
+@router.post("/cases")
+async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
+    db = get_db()
+    ctx = await load_ctx()
+    outlet = ctx["outlets"].get(body.outletId)
+    if not outlet:
+        raise HTTPException(400, "Outlet tidak dikenal. Pilih dari daftar.")
+    if body.subJenis not in ctx["subJenis"]:
+        raise HTTPException(400, "Sub Jenis Komplain tidak dikenal.")
+    if body.channel not in ctx["channels"]:
+        raise HTTPException(400, "Channel tidak dikenal.")
+    if not body.ringkasan.strip():
+        raise HTTPException(400, "Ringkasan masalah wajib diisi.")
+    w = parse_iso(body.waktuMasuk) if body.waktuMasuk else now()
+    if w > now() + timedelta(minutes=2):
+        raise HTTPException(400, "Waktu Masuk tidak boleh di masa depan.")
+    dups = await find_duplicates(body.outletId, body.subJenis, w, body.orderNo)
+    if dups and not body.force:
+        raise HTTPException(409, {"message": f"Mungkin sama dengan {', '.join(dups)}. Tetap simpan?",
+                                  "duplicates": dups})
+    case_id = await next_case_id(outlet["type"])
+    c = {
+        "caseId": case_id, "brand": body.brand or outlet.get("brand") or "Cimol Bojot AA",
+        "outletId": body.outletId, "outletType": outlet["type"], "channel": body.channel,
+        "tipe": body.tipe or "Komplain", "subJenis": body.subJenis, "valid": "Y",
+        "ringkasan": body.ringkasan.strip(), "orderNo": body.orderNo, "customerName": body.customerName,
+        "customerPhone": body.customerPhone, "photos": body.photos[:3], "waktuMasuk": w, "hasTime": True,
+        "status": "Open", "reopenCount": 0, "csAgent": u["name"], "csAgentId": u["id"],
+        "source": body.source or "manual", "sourceRefId": body.sourceRefId,
+        "possibleDuplicateOf": dups[0] if dups else None,
+        "createdBy": u["name"], "createdAt": now(), "surveyToken": survey_token(),
+    }
+    sj = ctx["subJenis"][body.subJenis]
+    c["picDept"] = sj["picFrozen"] if outlet["type"] == "online_frozen" else sj["picOutlet"]
+    await save_case(c, ctx)
+    await add_event(case_id, "created", u, {"channel": body.channel})
+    return out_case(c, u)
+
+
+# ------------------------------------------------------------------ read
+
+@router.get("/cases")
+async def list_cases(u=Depends(current_user), frm: Optional[str] = Query(None, alias="from"), to: Optional[str] = None,
+                     status: Optional[str] = None, level: Optional[str] = None, jenis: Optional[str] = None,
+                     subJenis: Optional[str] = None, channel: Optional[str] = None, outletId: Optional[str] = None,
+                     area: Optional[str] = None, picDept: Optional[str] = None, kompensasi: Optional[str] = None,
+                     luarStandard: bool = False, dataIssue: bool = False, agent: Optional[str] = None,
+                     q: Optional[str] = None, limit: int = 500):
+    qq = {}
+    if frm or to:
+        qq["tanggalMasuk"] = {"$gte": frm or "0000", "$lte": to or "9999"}
+    for k, v in (("status", status), ("level", level), ("jenis", jenis), ("subJenis", subJenis),
+                 ("channel", channel), ("outletId", outletId), ("area", area), ("picDept", picDept),
+                 ("kompensasiJenis", kompensasi), ("csAgent", agent)):
+        if v:
+            qq[k] = {"$in": v.split("|")} if "|" in v else v
+    if luarStandard:
+        qq["kompensasiOutsideStandard"] = True
+    if dataIssue:
+        qq["dataOk"] = False
+    area_filter(u, qq)
+    rows = [c async for c in get_db().cases.find(qq).sort("waktuMasuk", -1).limit(limit)]
+    if q:
+        ql = q.lower()
+        rows = [c for c in rows if ql in " ".join(str(c.get(k) or "") for k in
+                                                   ("caseId", "ringkasan", "outletName", "orderNo", "customerName",
+                                                    "subJenis", "notes")).lower()]
+    return [out_case(c, u) for c in rows]
+
+
+@router.get("/cases/{case_id}")
+async def get_case(case_id: str, u=Depends(current_user)):
+    c = await get_case_or_404(case_id)
+    if u["role"] == "Manager Area" and c.get("area") not in (u.get("areas") or []):
+        raise HTTPException(403, "Case ini di luar area Anda.")
+    ev = [clean(e) async for e in get_db().events.find({"caseId": case_id}).sort("at", 1)]
+    d = out_case(c, u)
+    d["events"] = ev
+    d["surveyUrl"] = f"{Config.PUBLIC_BASE_URL}/survei/{c.get('surveyToken')}" if c.get("surveyToken") else None
+    if c.get("voucherCode"):
+        d["voucher"] = clean(await get_db().vouchers.find_one({"kode": c["voucherCode"]}))
+    return d
+
+
+# ------------------------------------------------------------------ actions
+
+class PatchIn(BaseModel):
+    ringkasan: Optional[str] = None
+    orderNo: Optional[str] = None
+    customerName: Optional[str] = None
+    customerPhone: Optional[str] = None
+    notes: Optional[str] = None
+    valid: Optional[str] = None
+    tipe: Optional[str] = None
+    rootCause: Optional[str] = None
+    picDept: Optional[str] = None
+    brand: Optional[str] = None
+    subJenis: Optional[str] = None
+    outletId: Optional[str] = None
+    channel: Optional[str] = None
+    costCenterFinal: Optional[str] = None
+    photos: Optional[list[str]] = None
+    nilaiKompensasi: Optional[int] = None
+
+
+@router.patch("/cases/{case_id}")
+async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
+    c = await get_case_or_404(case_id)
+    data = body.model_dump(exclude_none=True)
+    limited = {"rootCause", "notes", "costCenterFinal"}
+    if u["role"] in ("Manager Area", "Ops/QC"):
+        if set(data) - limited:
+            raise HTTPException(403, "Peran Anda hanya bisa mengisi root cause, catatan, dan cost center final.")
+    elif u["role"] == "Viewer":
+        raise HTTPException(403, "Viewer hanya bisa melihat.")
+    if "subJenis" in data and u["role"] not in LEAD and data["subJenis"] != c.get("subJenis"):
+        if c["status"] not in ("Open", "Responded"):
+            raise HTTPException(403, "Sub jenis case yang sudah Resolved hanya bisa diubah CS Lead.")
+    before = {k: c.get(k) for k in data}
+    c.update(data)
+    if "subJenis" in data and before.get("subJenis") != data["subJenis"]:
+        c["level"] = None
+        c["levelChangeReason"] = None
+    if "outletId" in data:
+        c["outletType"] = None
+    c.pop("possibleDuplicateOf", None) if data.get("valid") else None
+    await save_case(c)
+    await add_event(case_id, "edited", u, {"fields": list(data)})
+    return out_case(c, u)
+
+
+@router.post("/cases/{case_id}/respond")
+async def respond(case_id: str, u=Depends(require(*WRITERS))):
+    c = await get_case_or_404(case_id)
+    if c.get("waktuFirstResponse"):
+        raise HTTPException(400, "Case ini sudah ditandai dibalas.")
+    c["waktuFirstResponse"] = now()
+    if c["status"] == "Open":
+        c["status"] = "Responded"
+    await save_case(c)
+    await add_event(case_id, "responded", u)
+    return out_case(c, u)
+
+
+class ResolveIn(BaseModel):
+    rootCause: str
+    picDept: Optional[str] = None
+    kompensasiKey: str
+    nilaiKompensasi: Optional[int] = None
+
+
+@router.post("/cases/{case_id}/resolve")
+async def resolve(case_id: str, body: ResolveIn, u=Depends(require(*WRITERS))):
+    db = get_db()
+    c = await get_case_or_404(case_id)
+    ctx = await load_ctx()
+    k = ctx["kompensasi"].get(body.kompensasiKey)
+    if not k:
+        raise HTTPException(400, "Bentuk kompensasi tidak dikenal.")
+    if not body.rootCause.strip():
+        raise HTTPException(400, "Root cause wajib diisi sebelum Resolved.")
+    if not c.get("waktuFirstResponse"):
+        c["waktuFirstResponse"] = now()
+    c.update(rootCause=body.rootCause.strip(), kompensasiKey=k["key"], kompensasiJenis=k["jenis"],
+             kompensasiLabel=k["label"], waktuResolved=now(), status="Resolved",
+             nilaiKompensasi=body.nilaiKompensasi if body.nilaiKompensasi is not None else k.get("nilai", 0))
+    if body.picDept:
+        c["picDept"] = body.picDept
+    voucher = None
+    if k.get("voucherJenis") and not c.get("voucherCode"):
+        voucher = await issue_voucher(k["voucherJenis"], case_id)
+        if voucher:
+            c["voucherCode"] = voucher["kode"]
+            await add_event(case_id, "voucher_issued", u, {"kode": voucher["kode"]})
+    await save_case(c, ctx)
+    await add_event(case_id, "resolved", u, {"kompensasi": k["label"], "nilai": c["nilaiKompensasi"]})
+    d = out_case(c, u)
+    d["voucher"] = clean(voucher)
+    d["voucherWarning"] = (None if (voucher or not k.get("voucherJenis") or c.get("voucherCode"))
+                           else f"Stok {k['voucherJenis']} habis. Tambah kode di menu Voucher.")
+    return d
+
+
+class CloseIn(BaseModel):
+    followUpUlang: str
+    costCenterFinal: Optional[str] = None
+
+
+@router.post("/cases/{case_id}/close")
+async def close(case_id: str, body: CloseIn, u=Depends(require(*WRITERS))):
+    c = await get_case_or_404(case_id)
+    if not c.get("waktuResolved"):
+        raise HTTPException(400, "Selesaikan case dulu (Resolved) sebelum Closed.")
+    if body.followUpUlang not in ("Y", "N"):
+        raise HTTPException(400, "Pilih Y atau N untuk 'Customer follow-up ulang?'.")
+    if body.costCenterFinal:
+        c["costCenterFinal"] = body.costCenterFinal
+    from .logic import CRITICAL_COST_RC
+    if c.get("level") == "Critical" and c.get("subJenis") in CRITICAL_COST_RC and not c.get("costCenterFinal"):
+        raise HTTPException(400, "Case Critical ini butuh cost center final (Factory atau Operasional) sebelum Closed.")
+    c.update(followUpUlang=body.followUpUlang, waktuClosed=now(), status="Closed")
+    await save_case(c)
+    await add_event(case_id, "closed", u, {"followUpUlang": body.followUpUlang})
+    return out_case(c, u)
+
+
+@router.post("/cases/{case_id}/reopen")
+async def reopen(case_id: str, body: dict, u=Depends(require(*WRITERS))):
+    c = await get_case_or_404(case_id)
+    if c["status"] not in ("Resolved", "Closed"):
+        raise HTTPException(400, "Hanya case Resolved/Closed yang bisa dibuka ulang.")
+    c["reopenCount"] = (c.get("reopenCount") or 0) + 1
+    c["status"] = "Responded"
+    c["waktuClosed"] = None
+    c["waktuResolved"] = None
+    await save_case(c)
+    await add_event(case_id, "reopened", u, {"reason": body.get("reason")})
+    return out_case(c, u)
+
+
+@router.post("/cases/{case_id}/note")
+async def note(case_id: str, body: dict, u=Depends(require("Admin", "CS Lead", "CS Agent", "Manager Area", "Ops/QC"))):
+    await get_case_or_404(case_id)
+    t = (body.get("text") or "").strip()
+    if not t:
+        raise HTTPException(400, "Catatan kosong.")
+    await add_event(case_id, "note", u, {"text": t})
+    return {"ok": True}
+
+
+class CorrectIn(BaseModel):
+    field: str
+    value: Optional[str] = None
+    reason: str
+
+
+@router.post("/cases/{case_id}/correct-time")
+async def correct_time(case_id: str, body: CorrectIn, u=Depends(require(*LEAD))):
+    if body.field not in ("waktuMasuk", "waktuFirstResponse", "waktuResolved", "waktuClosed"):
+        raise HTTPException(400, "Kolom waktu tidak dikenal.")
+    if not body.reason.strip():
+        raise HTTPException(400, "Alasan koreksi wajib diisi.")
+    c = await get_case_or_404(case_id)
+    val = parse_iso(body.value) if body.value else None
+    if val and val > now() + timedelta(minutes=2):
+        raise HTTPException(400, "Waktu tidak boleh di masa depan.")
+    trial = dict(c)
+    trial[body.field] = val
+    if body.field == "waktuMasuk" and not val:
+        raise HTTPException(400, "Waktu Masuk tidak boleh kosong.")
+    wm = as_utc(trial["waktuMasuk"])
+    for f in ("waktuFirstResponse", "waktuResolved", "waktuClosed"):
+        if trial.get(f) and as_utc(trial[f]) < wm:
+            raise HTTPException(400, "Waktu tidak boleh lebih awal dari Waktu Masuk.")
+    if trial.get("waktuClosed") and (not trial.get("waktuResolved") or as_utc(trial["waktuClosed"]) < as_utc(trial["waktuResolved"])):
+        raise HTTPException(400, "Waktu Closed tidak boleh sebelum Waktu Resolved.")
+    before = c.get(body.field)
+    c[body.field] = val
+    if body.field == "waktuMasuk":
+        c["hasTime"] = True
+    st = "Open"
+    if c.get("waktuFirstResponse"):
+        st = "Responded"
+    if c.get("waktuResolved"):
+        st = "Resolved"
+    if c.get("waktuClosed"):
+        st = "Closed"
+    c["status"] = st
+    await save_case(c)
+    await audit(u, f"correct-time {case_id}.{body.field}", str(before), str(val), body.reason)
+    await add_event(case_id, "time_corrected", u, {"field": body.field, "before": str(before), "after": str(val),
+                                                  "reason": body.reason})
+    return out_case(c, u)
+
+
+class LevelIn(BaseModel):
+    level: str
+    reason: str
+
+
+@router.post("/cases/{case_id}/change-level")
+async def change_level(case_id: str, body: LevelIn, u=Depends(require(*WRITERS))):
+    if body.level not in ("Minor", "Major", "Critical"):
+        raise HTTPException(400, "Level tidak dikenal.")
+    if not body.reason.strip():
+        raise HTTPException(400, "Alasan perubahan level wajib diisi.")
+    c = await get_case_or_404(case_id)
+    before = c.get("level")
+    c["level"] = body.level
+    c["levelChangeReason"] = body.reason.strip() if body.level != c.get("levelStandard") else None
+    await save_case(c)
+    await audit(u, f"change-level {case_id}", before, body.level, body.reason)
+    await add_event(case_id, "level_changed", u, {"from": before, "to": body.level, "reason": body.reason})
+    return out_case(c, u)
+
+
+@router.delete("/cases/{case_id}")
+async def delete_case(case_id: str, u=Depends(require("Admin"))):
+    c = await get_case_or_404(case_id)
+    await get_db().cases.delete_one({"caseId": case_id})
+    await audit(u, f"delete {case_id}", clean(c), None, "hapus case")
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ inbox
+
+@router.get("/inbox")
+async def inbox(u=Depends(current_user)):
+    db = get_db()
+    q = area_filter(u, {"status": {"$in": ["Open", "Responded", "Resolved"]}})
+    rows = [c async for c in db.cases.find(q)]
+    t = now()
+
+    def urgency(c):
+        crit = 0 if c.get("level") == "Critical" else 1
+        if c["status"] == "Open":
+            left = c.get("targetFrtMin", 5) - (t - as_utc(c["waktuMasuk"])).total_seconds() / 60
+        else:
+            tr = c.get("targetResolutionMin") or 4320
+            left = tr - (t - as_utc(c["waktuMasuk"])).total_seconds() / 60
+        return crit, left
+
+    rows.sort(key=urgency)
+    sec = {"open": [], "responded": [], "resolved": []}
+    for c in rows:
+        d = out_case(c, u)
+        d["ageMin"] = round((t - as_utc(c["waktuMasuk"])).total_seconds() / 60)
+        sec[c["status"].lower()].append(d)
+    csat = [clean(x) async for x in db.csat.find({"triage": "belum", "needsTriage": True}).sort("timestamp", -1).limit(50)]
+    reviews = [clean(x) async for x in db.reviews.find({"needsTriage": True, "linkedCaseId": None,
+                                                        "triage": {"$ne": "tidak_perlu"}}).sort("tanggal", -1).limit(50)]
+    if not can_see_phone(u):
+        for x in csat:
+            x["phone"] = mask_phone(x.get("phone"))
+    return {**sec, "csatDrafts": csat, "reviewDrafts": reviews}
+
+
+# ------------------------------------------------------------------ dashboard
+
+async def total_trx(frm: date, to: date):
+    """Total transaksi periode dari input bulanan, prorata per hari."""
+    db = get_db()
+    total, have = 0.0, False
+    d = frm
+    cache = {}
+    while d <= to:
+        key = d.strftime("%Y-%m")
+        if key not in cache:
+            cache[key] = await db.monthly.find_one({"month": key})
+        mi = cache[key]
+        if mi and mi.get("totalTransaksi"):
+            nxt = (d.replace(day=28) + timedelta(days=4)).replace(day=1)
+            days = (nxt - d.replace(day=1)).days
+            total += mi["totalTransaksi"] / days
+            have = True
+        d += timedelta(days=1)
+    return round(total) if have else None
+
+
+async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None):
+    ctx = await load_ctx()
+    targets = ctx["targets"]
+    cases = await cases_in_period(frm, to, u, brand, area)
+    f, t = date.fromisoformat(frm), date.fromisoformat(to)
+    trx = await total_trx(f, t)
+    m, vol, table = compute_metrics(cases, targets, trx)
+    span = (t - f).days + 1
+    pf, pt = f - timedelta(days=span), f - timedelta(days=1)
+    prev_cases = await cases_in_period(pf.isoformat(), pt.isoformat(), u, brand, area)
+    pm, pvol, _ = compute_metrics(prev_cases, targets)
+    komplain = [c for c in cases if c.get("tipe", "Komplain") == "Komplain"]
+    levels = breakdown(komplain, "level")
+    order = {"Minor": 0, "Major": 1, "Critical": 2}
+    levels.sort(key=lambda r: order.get(r["name"], 3))
+    for r in levels:
+        r["pj"] = ctx["pj"].get(r["name"], "-")
+    jenis = breakdown(komplain, "jenis")
+    subj = breakdown(komplain, "subJenis", lambda n, cs: {
+        "jenis": (ctx["subJenis"].get(n) or {}).get("jenis"), "levelStandard": (ctx["subJenis"].get(n) or {}).get("level")})
+    channels = breakdown(cases, "channel")
+    pic = breakdown(komplain, "picDept")
+    outlets = breakdown(komplain, "outletName", lambda n, cs: {
+        "topSub": max(((s, sum(1 for c in cs if c.get("subJenis") == s)) for s in {c.get("subJenis") for c in cs}),
+                      key=lambda x: x[1])[0] if cs else None})[:10]
+    komp = breakdown([c for c in komplain if c.get("kompensasiJenis")], "kompensasiJenis", lambda n, cs: {
+        "luarStandard": any(c.get("kompensasiOutsideStandard") for c in cs)})
+    hours = by_hour(cases)
+    weeks = weekly(cases, f, t, targets)
+    return {
+        "period": {"from": frm, "to": to, "prevFrom": pf.isoformat(), "prevTo": pt.isoformat(), "totalTrx": trx},
+        "metrics": m, "prev": pm, "volume": vol, "prevVolume": pvol, "table": table, "targets": targets,
+        "levels": levels, "jenis": jenis, "subJenis": subj, "channels": channels, "picDept": pic,
+        "outlets": outlets, "kompensasi": komp, "hours": hours, "weeks": weeks,
+        "insights": insights(cases, m, vol, hours, subj, channels),
+    }
+
+
+@router.get("/dashboard")
+async def dashboard(u=Depends(current_user), frm: str = Query(..., alias="from"), to: str = Query(...),
+                    brand: Optional[str] = None, area: Optional[str] = None):
+    return await build_dashboard(frm, to, u, brand, area)
+
+
+# ------------------------------------------------------------------ meeting
+
+class MeetingIn(BaseModel):
+    date: str
+    periodStart: str
+    periodEnd: str
+    title: Optional[str] = None
+    attendees: Optional[str] = None
+
+
+@router.get("/meetings")
+async def meetings(u=Depends(current_user)):
+    return [clean(m) async for m in get_db().meetings.find({}, {"snapshot": 0}).sort("date", -1)]
+
+
+@router.post("/meetings")
+async def create_meeting(body: MeetingIn, u=Depends(require(*LEAD, "CS Agent"))):
+    m = {"id": new_id(), **body.model_dump(), "insights": [], "decisions": [], "locked": False,
+         "createdBy": u["name"], "createdAt": now()}
+    m["title"] = m["title"] or f"Meeting Service Excellence {body.date}"
+    await get_db().meetings.insert_one(m)
+    return clean(m)
+
+
+async def _top5(dash):
+    db = get_db()
+    rows = [r for r in dash["subJenis"] if r["count"]][:5]
+    out = []
+    for i, r in enumerate(rows):
+        a = await db.voc_actions.find_one({"subJenis": r["name"], "status": {"$nin": ["Dropped"]}},
+                                          sort=[("createdAt", -1)])
+        out.append({"rank": i + 1, **r, "action": clean(a)})
+    return out
+
+
+@router.get("/meetings/{mid}")
+async def get_meeting(mid: str, u=Depends(current_user)):
+    db = get_db()
+    m = await db.meetings.find_one({"id": mid})
+    if not m:
+        raise HTTPException(404, "Meeting tidak ditemukan.")
+    if m.get("locked") and m.get("snapshot"):
+        dash = m["snapshot"]
+    else:
+        dash = await build_dashboard(m["periodStart"], m["periodEnd"])
+    prev = await db.meetings.find_one({"date": {"$lt": m["date"]}, "locked": True}, sort=[("date", -1)])
+    open_actions = [clean(a) async for a in db.voc_actions.find({"status": {"$in": ["Open", "On Progress"]}}).sort("deadline", 1)]
+    reviews = await review_summary(m["periodStart"], m["periodEnd"])
+    csat = await csat_summary(m["periodStart"], m["periodEnd"])
+    return {"meeting": clean({k: v for k, v in m.items() if k != "snapshot"}), "dashboard": dash,
+            "top5": await _top5(dash), "openActions": open_actions, "reviews": reviews, "csat": csat,
+            "prevMetrics": (prev or {}).get("snapshot", {}).get("metrics") if prev else None,
+            "prevMeetingDate": prev["date"] if prev else None}
+
+
+@router.patch("/meetings/{mid}")
+async def patch_meeting(mid: str, body: dict, u=Depends(require(*LEAD, "CS Agent"))):
+    db = get_db()
+    m = await db.meetings.find_one({"id": mid})
+    if not m:
+        raise HTTPException(404, "Meeting tidak ditemukan.")
+    if m.get("locked"):
+        raise HTTPException(400, "Meeting sudah dikunci.")
+    allowed = {k: v for k, v in body.items() if k in ("insights", "decisions", "attendees", "title")}
+    await db.meetings.update_one({"id": mid}, {"$set": allowed})
+    return {"ok": True}
+
+
+@router.post("/meetings/{mid}/suggest")
+async def suggest(mid: str, u=Depends(current_user)):
+    m = await get_db().meetings.find_one({"id": mid})
+    if not m:
+        raise HTTPException(404, "Meeting tidak ditemukan.")
+    cases = await cases_in_period(m["periodStart"], m["periodEnd"])
+    dash = await build_dashboard(m["periodStart"], m["periodEnd"])
+    komplain = [c for c in cases if c.get("tipe", "Komplain") == "Komplain"]
+    return suggest_insights(komplain, dash["metrics"], dash["volume"], dash["subJenis"], dash["levels"])
+
+
+@router.post("/meetings/{mid}/lock")
+async def lock(mid: str, u=Depends(require(*LEAD))):
+    db = get_db()
+    m = await db.meetings.find_one({"id": mid})
+    if not m:
+        raise HTTPException(404, "Meeting tidak ditemukan.")
+    dash = await build_dashboard(m["periodStart"], m["periodEnd"])
+    await db.meetings.update_one({"id": mid}, {"$set": {"locked": True, "snapshot": dash, "lockedAt": now(),
+                                                        "lockedBy": u["name"]}})
+    return {"ok": True}
+
+
+@router.delete("/meetings/{mid}")
+async def del_meeting(mid: str, u=Depends(require(*LEAD))):
+    await get_db().meetings.delete_one({"id": mid})
+    return {"ok": True}
+
+
+class ActionIn(BaseModel):
+    subJenis: Optional[str] = None
+    topic: Optional[str] = None
+    rootCause: Optional[str] = ""
+    action: str
+    picDept: Optional[str] = ""
+    picName: Optional[str] = ""
+    status: str = "Open"
+    deadline: Optional[str] = None
+    meetingId: Optional[str] = None
+
+
+@router.get("/voc-actions")
+async def actions(u=Depends(current_user), status: Optional[str] = None):
+    q = {"status": {"$in": status.split("|")}} if status else {}
+    return [clean(a) async for a in get_db().voc_actions.find(q).sort("createdAt", -1)]
+
+
+@router.post("/voc-actions")
+async def add_action(body: ActionIn, u=Depends(require(*LEAD, "CS Agent", "Manager Area", "Ops/QC"))):
+    a = {"id": new_id(), **body.model_dump(), "updates": [], "createdAt": now(), "createdBy": u["name"]}
+    await get_db().voc_actions.insert_one(a)
+    return clean(a)
+
+
+@router.patch("/voc-actions/{aid}")
+async def patch_action(aid: str, body: dict, u=Depends(require(*LEAD, "CS Agent", "Manager Area", "Ops/QC"))):
+    db = get_db()
+    a = await db.voc_actions.find_one({"id": aid})
+    if not a:
+        raise HTTPException(404, "Action tidak ditemukan.")
+    upd = {k: v for k, v in body.items() if k in ("rootCause", "action", "picDept", "picName", "status", "deadline",
+                                                  "subJenis", "topic")}
+    push = {}
+    if body.get("update"):
+        push = {"$push": {"updates": {"date": now(), "text": body["update"], "by": u["name"]}}}
+    if upd.get("status") and upd["status"] != a.get("status"):
+        push.setdefault("$push", {"updates": {"date": now(), "text": f"Status → {upd['status']}", "by": u["name"]}})
+    await db.voc_actions.update_one({"id": aid}, {"$set": upd, **push})
+    return clean(await db.voc_actions.find_one({"id": aid}))
+
+
+# ------------------------------------------------------------------ summaries for meeting
+
+async def review_summary(frm, to):
+    rows = [r async for r in get_db().reviews.find({"tanggalDate": {"$gte": frm, "$lte": to}})]
+    from collections import Counter
+    return {"count": len(rows),
+            "byPlatform": dict(Counter(r.get("platform") for r in rows)),
+            "bySubJenis": Counter(r.get("subJenis") for r in rows).most_common(6),
+            "byLevel": dict(Counter(r.get("level") or "Belum Diatur" for r in rows)),
+            "belumDiproses": sum(1 for r in rows if (r.get("statusTindakLanjut") or "Belum diproses") == "Belum diproses"),
+            "critical": sum(1 for r in rows if r.get("level") == "Critical")}
+
+
+async def csat_summary(frm, to):
+    rows = [r async for r in get_db().csat.find({"tanggal": {"$gte": frm, "$lte": to}})]
+    rated = [r for r in rows if isinstance(r.get("ratingKeseluruhan"), int)]
+    return {"count": len(rows),
+            "puas": round(sum(1 for r in rated if r["ratingKeseluruhan"] >= 4) / len(rated), 4) if rated else None,
+            "beliLagi": round(sum(1 for r in rows if r.get("beliLagi") == "Ya") / len(rows), 4) if rows else None,
+            "avg": round(sum(r["ratingKeseluruhan"] for r in rated) / len(rated), 2) if rated else None}

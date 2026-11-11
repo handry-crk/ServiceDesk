@@ -20,6 +20,7 @@ class Config:
     PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").strip().rstrip("/")
     if PUBLIC_BASE_URL and not PUBLIC_BASE_URL.startswith("http"):
         PUBLIC_BASE_URL = "https://" + PUBLIC_BASE_URL
+    ALLOWED_EMAIL_DOMAIN = os.getenv("ALLOWED_EMAIL_DOMAIN", "citarasakuliner.com").strip().lower().lstrip("@")
     RESET_ADMIN_PIN = os.getenv("RESET_ADMIN_PIN", "false").lower() in ("1", "true", "yes")
     DATA_DIR = os.getenv("DATA_DIR", "/data")
     RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")

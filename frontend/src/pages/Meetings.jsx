@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, useApp, useAsync, fmtD, presets, todayWIB, WRITERS } from '../lib.jsx'
+import { api, useApp, useAsync, fmtD, presets, todayWIB, MEETING_EDITORS } from '../lib.jsx'
 import { Btn, Card, Empty, ErrorBox, Field, Sheet, Skeleton, PeriodPicker, inputCls } from '../ui.jsx'
 
 export default function Meetings() {
@@ -17,7 +17,7 @@ export default function Meetings() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div><h1 className="text-2xl font-extrabold">Meeting Service Excellence</h1><p className="text-sm text-mute">Mode presentasi: headline, VoC Top 5, action tracker, insight untuk management.</p></div>
-        {can(...WRITERS) && <Btn onClick={() => setOpen(true)}>+ Buat meeting</Btn>}
+        {can(...MEETING_EDITORS) && <Btn onClick={() => setOpen(true)}>+ Buat meeting</Btn>}
       </div>
       <ErrorBox error={error} />
       {loading ? <Skeleton /> : (

@@ -12,7 +12,8 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
 from . import standards as S
-from .auth import current_user, require, LEAD, WRITERS, ROLES, hash_pin, login, public_user
+from .auth import (current_user, require, LEAD, WRITERS, ROLES, hash_pin, login, public_user, check_slot, email_ok,
+                   ROLE_SLOTS, ROLE_LABEL, MEETING_EDITORS)
 from .core import get_db, now, clean, parse_iso, Config, wib_date, wib, WIB, mask_phone, log
 from .logic import load_ctx
 from .services import (new_id, recompute_all, audit, match_outlet, save_case, next_case_id, add_event,
@@ -27,11 +28,6 @@ router = APIRouter(prefix="/api")
 class LoginIn(BaseModel):
     name: str
     pin: str
-
-
-@router.get("/auth/users")
-async def login_names():
-    return [u["name"] async for u in get_db().users.find({"active": True}).sort("name", 1)]
 
 
 @router.post("/auth/login")
@@ -134,7 +130,18 @@ class UserIn(BaseModel):
     name: str
     role: str
     pin: str
+    email: Optional[str] = None
     areas: list[str] = []
+
+
+@router.get("/roles")
+async def roles(u=Depends(current_user)):
+    db = get_db()
+    out = []
+    for r in ROLES:
+        used = await db.users.count_documents({"role": r, "active": True})
+        out.append({"role": r, "label": ROLE_LABEL.get(r, r), "slots": ROLE_SLOTS.get(r), "used": used})
+    return {"roles": out, "domain": Config.ALLOWED_EMAIL_DOMAIN}
 
 
 @router.get("/users")
@@ -155,8 +162,16 @@ async def add_user(body: UserIn, u=Depends(require(*LEAD))):
         raise HTTPException(400, "PIN harus 6 digit angka.")
     if await db.users.find_one({"name": body.name}):
         raise HTTPException(400, "Nama sudah dipakai.")
-    x = {"id": new_id(), "name": body.name, "role": body.role, "areas": body.areas, "pinHash": hash_pin(body.pin),
-         "active": True, "created": now()}
+    email = None
+    if body.email:
+        email = email_ok(body.email)
+        if not email:
+            raise HTTPException(400, f"Email harus memakai domain @{Config.ALLOWED_EMAIL_DOMAIN}.")
+        if await db.users.find_one({"email": email}):
+            raise HTTPException(400, "Email sudah dipakai user lain.")
+    await check_slot(body.role)
+    x = {"id": new_id(), "name": body.name, "email": email, "role": body.role, "areas": body.areas,
+         "pinHash": hash_pin(body.pin), "active": True, "created": now()}
     await db.users.insert_one(x)
     await audit(u, f"add user {body.name}", None, body.role)
     return public_user(x)
@@ -166,8 +181,29 @@ async def add_user(body: UserIn, u=Depends(require(*LEAD))):
 async def patch_user(uid: str, body: dict, u=Depends(require(*LEAD))):
     db = get_db()
     upd = {k: v for k, v in body.items() if k in ("role", "areas", "active", "name")}
+    target = await db.users.find_one({"id": uid})
+    if not target:
+        raise HTTPException(404, "User tidak ditemukan.")
     if upd.get("role") == "Admin" and u["role"] != "Admin":
         raise HTTPException(403, "Hanya Admin yang bisa memberi peran Admin.")
+    if target["role"] == "Admin" and u["role"] != "Admin":
+        raise HTTPException(403, "Hanya Admin yang bisa mengubah user Admin.")
+    if upd.get("role") and upd["role"] not in ROLES:
+        raise HTTPException(400, "Peran tidak dikenal.")
+    new_role = upd.get("role", target["role"])
+    becomes_active = upd.get("active", target.get("active", True))
+    if becomes_active and (new_role != target["role"] or not target.get("active", True)):
+        await check_slot(new_role, exclude_id=uid)
+    if "email" in body:
+        if body["email"]:
+            e = email_ok(body["email"])
+            if not e:
+                raise HTTPException(400, f"Email harus memakai domain @{Config.ALLOWED_EMAIL_DOMAIN}.")
+            if await db.users.find_one({"email": e, "id": {"$ne": uid}}):
+                raise HTTPException(400, "Email sudah dipakai user lain.")
+            upd["email"] = e
+        else:
+            upd["email"] = None
     if body.get("pin"):
         if len(body["pin"]) != 6 or not body["pin"].isdigit():
             raise HTTPException(400, "PIN harus 6 digit angka.")
@@ -552,7 +588,7 @@ EXPORT_COLS = [
 
 
 @router.get("/export/cases.xlsx")
-async def export_cases(u=Depends(require("Admin", "CS Lead", "CS Agent", "Viewer", "Ops/QC", "Manager Area")),
+async def export_cases(u=Depends(require("Admin", "CS Lead", "CS Agent", "Marketing TL", "Viewer", "Ops/QC", "Manager Area")),
                        frm: Optional[str] = Query(None, alias="from"), to: Optional[str] = None):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
@@ -609,13 +645,15 @@ async def public_metrics(frm: str = Query(..., alias="from"), to: str = Query(..
 
 @router.get("/notifications")
 async def notifications(u=Depends(current_user)):
-    rows = [clean(n) async for n in get_db().notifications.find({}).sort("at", -1).limit(30)]
+    q = {"$or": [{"roles": {"$exists": False}}, {"roles": u["role"]}]}
+    rows = [clean(n) async for n in get_db().notifications.find(q).sort("at", -1).limit(30)]
     return rows
 
 
 @router.post("/notifications/read")
 async def notif_read(u=Depends(current_user)):
-    await get_db().notifications.update_many({}, {"$addToSet": {"readBy": u["id"]}})
+    await get_db().notifications.update_many({"$or": [{"roles": {"$exists": False}}, {"roles": u["role"]}]},
+                                             {"$addToSet": {"readBy": u["id"]}})
     return {"ok": True}
 
 

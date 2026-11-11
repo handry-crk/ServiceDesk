@@ -68,7 +68,8 @@ async def seed_if_empty():
                                  {"$set": {"triage": "tidak_perlu"}})
     for coll, keys in (("cases", ["caseId", "tanggalMasuk", "status", "outletId", "subJenis", "surveyToken"]),
                        ("sessions", ["token"]), ("vouchers", ["kode", "status"]), ("csat", ["id", "timestamp"]),
-                       ("reviews", ["id"]), ("events", ["caseId"])):
+                       ("reviews", ["id"]), ("events", ["caseId"]), ("users", ["email"]),
+                       ("registrations", ["id", "email", "status"])):
         for k in keys:
             try:
                 await db[coll].create_index(k)

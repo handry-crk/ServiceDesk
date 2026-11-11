@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useApp, LEAD } from '../lib.jsx'
+import { useApp, LEAD, roleLabel } from '../lib.jsx'
 import { Card } from '../ui.jsx'
 
 export default function Lainnya() {
@@ -16,7 +16,7 @@ export default function Lainnya() {
       <div className="grid gap-3 sm:grid-cols-2">
         {items.map((i) => <Link key={i.to} to={i.to}><Card className="p-4 h-full hover:border-brick"><div className="font-bold">{i.t}</div><div className="text-sm text-mute">{i.d}</div></Card></Link>)}
       </div>
-      <div className="mt-6 text-sm text-mute">Masuk sebagai <b>{user.name}</b> ({user.role}). <button className="text-brick underline" onClick={logout}>Keluar</button></div>
+      <div className="mt-6 text-sm text-mute">Masuk sebagai <b>{user.name}</b> ({roleLabel(user.role)}). <button className="text-brick underline" onClick={logout}>Keluar</button></div>
     </div>
   )
 }

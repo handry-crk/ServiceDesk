@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from .auth import current_user, require, LEAD, WRITERS
+from .auth import current_user, require, LEAD, WRITERS, MEETING_EDITORS
 from .core import get_db, now, parse_iso, as_utc, clean, mask_phone, wib_date, Config
 from .logic import load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights
 from .services import (next_case_id, save_case, add_event, audit, find_duplicates, get_case_or_404,
@@ -592,7 +592,7 @@ async def meetings(u=Depends(current_user)):
 
 
 @router.post("/meetings")
-async def create_meeting(body: MeetingIn, u=Depends(require(*LEAD, "CS Agent"))):
+async def create_meeting(body: MeetingIn, u=Depends(require(*MEETING_EDITORS))):
     m = {"id": new_id(), **body.model_dump(), "insights": [], "decisions": [], "locked": False,
          "createdBy": u["name"], "createdAt": now()}
     m["title"] = m["title"] or f"Meeting Service Excellence {body.date}"
@@ -632,7 +632,7 @@ async def get_meeting(mid: str, u=Depends(current_user)):
 
 
 @router.patch("/meetings/{mid}")
-async def patch_meeting(mid: str, body: dict, u=Depends(require(*LEAD, "CS Agent"))):
+async def patch_meeting(mid: str, body: dict, u=Depends(require(*MEETING_EDITORS))):
     db = get_db()
     m = await db.meetings.find_one({"id": mid})
     if not m:
@@ -706,14 +706,14 @@ async def actions(u=Depends(current_user), status: Optional[str] = None):
 
 
 @router.post("/voc-actions")
-async def add_action(body: ActionIn, u=Depends(require(*LEAD, "CS Agent", "Manager Area", "Ops/QC"))):
+async def add_action(body: ActionIn, u=Depends(require(*MEETING_EDITORS, "Manager Area", "Ops/QC"))):
     a = {"id": new_id(), **body.model_dump(), "updates": [], "createdAt": now(), "createdBy": u["name"]}
     await get_db().voc_actions.insert_one(a)
     return clean(a)
 
 
 @router.patch("/voc-actions/{aid}")
-async def patch_action(aid: str, body: dict, u=Depends(require(*LEAD, "CS Agent", "Manager Area", "Ops/QC"))):
+async def patch_action(aid: str, body: dict, u=Depends(require(*MEETING_EDITORS, "Manager Area", "Ops/QC"))):
     db = get_db()
     a = await db.voc_actions.find_one({"id": aid})
     if not a:

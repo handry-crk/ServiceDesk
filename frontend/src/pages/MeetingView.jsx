@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, useApp, useAsync, fmtD, fmtPct, fmtNum, fmtRp, todayWIB, WRITERS, LEAD } from '../lib.jsx'
+import { api, useApp, useAsync, fmtD, fmtPct, fmtNum, fmtRp, todayWIB, WRITERS, LEAD, MEETING_EDITORS } from '../lib.jsx'
 import { Btn, ErrorBox, Skeleton, LevelBadge, inputCls } from '../ui.jsx'
 import { Headline, MetricsTable, LevelTable, HBar, HourChart, Weekly } from './Dashboard.jsx'
 import Compare from './Compare.jsx'
@@ -48,7 +48,7 @@ export default function MeetingView() {
   const [ins, setIns] = useState([])
   const [cur, setCur] = useState(0)
   const refs = useRef([])
-  const editable = can(...WRITERS) && data && !data.meeting.locked
+  const editable = can(...MEETING_EDITORS) && data && !data.meeting.locked
 
   useEffect(() => { if (data) setIns(data.meeting.insights?.length ? data.meeting.insights : []) }, [data])
   useEffect(() => {
@@ -171,7 +171,7 @@ export default function MeetingView() {
                     <div className="text-lg font-semibold">{a.action}</div>
                     <div className="text-sm text-mute">{a.picDept || '-'}{a.picName ? ` · ${a.picName}` : ''} · deadline {fmtD(a.deadline)}</div>
                     {a.updates?.length > 0 && <div className="text-xs text-mute mt-1">Update terakhir: {a.updates[a.updates.length - 1].text}</div>}
-                    {can(...WRITERS, 'Manager Area', 'Ops/QC') && <div className="flex flex-wrap gap-1 mt-2 no-print">{STATUSES.map((s) => <button key={s} onClick={() => updateAction(a, s)} className={`text-xs px-2.5 py-1.5 rounded-lg font-bold ${a.status === s ? ST_CLS[s] + ' ring-2 ring-ink/20' : 'bg-cream'}`}>{s}</button>)}</div>}
+                    {can(...MEETING_EDITORS, 'Manager Area', 'Ops/QC') && <div className="flex flex-wrap gap-1 mt-2 no-print">{STATUSES.map((s) => <button key={s} onClick={() => updateAction(a, s)} className={`text-xs px-2.5 py-1.5 rounded-lg font-bold ${a.status === s ? ST_CLS[s] + ' ring-2 ring-ink/20' : 'bg-cream'}`}>{s}</button>)}</div>}
                   </div>
                 )
               })}

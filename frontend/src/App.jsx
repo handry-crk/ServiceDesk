@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { useApp, api, fmtDT } from './lib.jsx'
+import { useApp, api, fmtDT, roleLabel } from './lib.jsx'
 import { Skeleton } from './ui.jsx'
 import Login from './pages/Login.jsx'
 import Inbox from './pages/Inbox.jsx'
@@ -8,6 +8,7 @@ import Catat from './pages/Catat.jsx'
 import Cases from './pages/Cases.jsx'
 import CaseDetail from './pages/CaseDetail.jsx'
 import { SurveiOutlet, SurveiCase } from './pages/Public.jsx'
+import Daftar from './pages/Daftar.jsx'
 
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
 const Meetings = lazy(() => import('./pages/Meetings.jsx'))
@@ -51,7 +52,7 @@ function Bell() {
         <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white text-ink rounded-2xl shadow-xl border border-line z-50 p-2">
           {rows.length === 0 && <div className="p-4 text-sm text-mute">Belum ada notifikasi.</div>}
           {rows.map((n, i) => (
-            <a key={i} href={n.caseId ? `/case/${n.caseId}` : undefined} className="block p-3 rounded-xl hover:bg-cream">
+            <a key={i} href={n.caseId ? `/case/${n.caseId}` : n.link || undefined} className="block p-3 rounded-xl hover:bg-cream">
               <div className={`text-sm ${n.kind === 'critical' ? 'text-brick font-semibold' : ''}`}>{n.text}</div>
               <div className="text-xs text-mute mt-1">{fmtDT(n.at)}</div>
             </a>
@@ -82,7 +83,7 @@ function Shell({ children }) {
           ))}
         </nav>
         <div className="text-sm border-t border-line pt-3 px-2">
-          <div className="font-semibold">{user?.name}</div><div className="text-xs text-mute">{user?.role}</div>
+          <div className="font-semibold">{user?.name}</div><div className="text-xs text-mute">{roleLabel(user?.role)}</div>
           <button className="text-xs text-brick mt-2" onClick={async () => { await logout(); nav('/login') }}>Keluar</button>
         </div>
       </aside>
@@ -124,9 +125,11 @@ function Shell({ children }) {
 export default function App() {
   const { user, ready } = useApp()
   const loc = useLocation()
-  if (loc.pathname.startsWith('/survei')) {
+  if (loc.pathname.startsWith('/survei') || loc.pathname.startsWith('/daftar')) {
     return (
       <Routes>
+        <Route path="/daftar" element={<Daftar />} />
+        <Route path="/daftar/:rid" element={<Daftar />} />
         <Route path="/survei-outlet" element={<SurveiOutlet />} />
         <Route path="/survei-outlet/:outletId" element={<SurveiOutlet />} />
         <Route path="/survei/:token" element={<SurveiCase />} />

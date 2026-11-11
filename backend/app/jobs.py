@@ -36,11 +36,16 @@ def send_email(to, subject, html):
     return False
 
 
-async def notify(kind, text, case_id=None, email_subject=None):
+async def notify(kind, text, case_id=None, email_subject=None, roles=None, link=None):
+    """roles: bila diisi, notifikasi hanya tampil untuk peran tersebut."""
     db = get_db()
-    await db.notifications.insert_one({"kind": kind, "text": text, "caseId": case_id, "at": now(), "readBy": []})
+    doc = {"kind": kind, "text": text, "caseId": case_id, "at": now(), "readBy": [], "link": link}
+    if roles:
+        doc["roles"] = list(roles)
+    await db.notifications.insert_one(doc)
     if email_subject:
-        send_email(await recipients(), email_subject, f"<p>{text}</p><p>{Config.PUBLIC_BASE_URL}/case/{case_id or ''}</p>")
+        url = f"{Config.PUBLIC_BASE_URL}{link or ('/case/' + case_id if case_id else '/')}"
+        send_email(await recipients(), email_subject, f"<p>{text}</p><p>{url}</p>")
 
 
 async def critical_alert():

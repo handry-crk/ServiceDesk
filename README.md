@@ -13,7 +13,8 @@ Stack: React + Tailwind + Recharts (frontend) · FastAPI (backend) · MongoDB ·
 - **Mode Meeting**: 7 slide (navigasi panah ← →), VoC Top 5 dengan action yang menempel ke sub jenis, action tracker lintas meeting, insight untuk management (ada saran otomatis), kunci snapshot, Unduh PDF (print A4 landscape), Salin ringkasan WA.
 - **CSAT outlet** (`/survei-outlet`, `/survei-outlet/{outletId}` untuk QR per gerobak) pengganti Google Form, dengan pencocokan nama outlet otomatis + alias. **Survei 1-tap per case** (`/survei/{token}`).
 - **Review & Rating online** GoFood/GrabFood, **Kode Voucher**, **Pengaturan** (matriks standard, target, channel, jam operasional CS, outlet, user & peran, transaksi bulanan, impor sheet lama, backup, audit log).
-- **Peran**: Admin, CS Lead, CS Agent, Manager Area (hanya areanya), Ops/QC, Viewer (nomor HP disamarkan). Login nama + PIN 6 digit, 5× salah → kunci 15 menit.
+- **Peran**: Admin, CRM Supervisor (CS Lead, 1 slot), Marketing Team Leader (1 slot), Customer Service (CS Agent, 5 slot), Manager Area (hanya areanya), Ops/QC, Viewer (nomor HP disamarkan). Login email kantor + PIN 6 digit (Admin lama boleh nama), 5× salah → kunci 15 menit.
+- **Daftar member baru** (`/daftar`): hanya email `@citarasakuliner.com` (`ALLOWED_EMAIL_DOMAIN`), kuota per peran, wajib disetujui Admin di Pengaturan → User. Bila `RESEND_API_KEY`/`SMTP_*` diisi, pendaftar juga harus memasukkan kode verifikasi yang dikirim ke emailnya.
 - **Jobs (WIB)**: alert Critical belum dibalas (tiap 5 menit), ringkasan pagi 08.00, rekap mingguan Senin 08.30, voucher hangus 00.10, backup Minggu 02.00.
 - **Integrasi**: `GET /api/public-metrics/service?from=&to=` dengan header `X-API-Key`. Export Excel dengan urutan kolom Case Log lama.
 

@@ -83,6 +83,9 @@ export function AppProvider({ children }) {
 
 export const WRITERS = ['Admin', 'CS Lead', 'CS Agent']
 export const LEAD = ['Admin', 'CS Lead']
+export const MEETING_EDITORS = ['Admin', 'CS Lead', 'CS Agent', 'Marketing TL']
+export const ROLE_LABEL = { 'CS Lead': 'CRM Supervisor', 'Marketing TL': 'Marketing Team Leader', 'CS Agent': 'Customer Service' }
+export const roleLabel = (r) => ROLE_LABEL[r] || r
 
 // ---------------- format ----------------
 const WIB = 'Asia/Jakarta'

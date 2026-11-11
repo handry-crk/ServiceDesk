@@ -139,33 +139,91 @@ function Outlets() {
   )
 }
 
+function Registrations({ onChange }) {
+  const { notify } = useApp()
+  const [tab, setTab] = useState('pending')
+  const { data, reload } = useAsync(() => api('/registrations', { params: { status: tab === 'all' ? undefined : tab } }), [tab])
+  const act = async (r, kind) => {
+    try {
+      let body = {}
+      if (kind === 'reject') { const reason = prompt(`Alasan menolak ${r.name}? (opsional)`); if (reason === null) return; body = { reason } }
+      await api(`/registrations/${r.id}/${kind}`, { method: 'POST', body })
+      notify(kind === 'approve' ? `${r.name} disetujui sebagai ${r.roleLabel}` : `${r.name} ditolak`); reload(); onChange?.()
+    } catch (e) { notify(e.message, 'err') }
+  }
+  const ST = { pending: 'Menunggu', verify: 'Verifikasi email', approved: 'Disetujui', rejected: 'Ditolak' }
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 className="font-bold">Pendaftaran member baru</h3>
+        <div className="flex gap-2">{[['pending', 'Menunggu'], ['verify', 'Verifikasi email'], ['approved', 'Disetujui'], ['rejected', 'Ditolak']].map(([k, l]) => <Chip key={k} active={tab === k} onClick={() => setTab(k)} className="!min-h-[34px] text-xs">{l}</Chip>)}</div>
+      </div>
+      {data && <div className="grid grid-cols-3 gap-2 mb-3">{data.slots.map((q) => (
+        <div key={q.role} className={`rounded-xl px-3 py-2 ${q.available ? 'bg-cream' : 'bg-brick-soft'}`}>
+          <div className="text-xs text-mute">{q.label}</div>
+          <div className="font-extrabold text-lg tabnum">{q.used}/{q.slots} <span className="text-xs font-normal text-mute">{q.available ? `sisa ${q.available}` : 'penuh'}{q.pending ? ` · ${q.pending} menunggu` : ''}</span></div>
+        </div>))}</div>}
+      <p className="text-xs text-mute mb-3">Link pendaftaran untuk dibagikan ke tim: <b className="break-all">{location.origin}/daftar</b>. Hanya email kantor; kuota dihitung dari user aktif.</p>
+      {data?.rows.length === 0 && <div className="text-sm text-mute py-4 text-center">Tidak ada pendaftaran {ST[tab]?.toLowerCase()}.</div>}
+      <div className="space-y-2">{data?.rows.map((r) => (
+        <div key={r.id} className="border border-line rounded-xl p-3 flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[200px]">
+            <div className="font-semibold">{r.name} <span className="text-xs font-normal text-mute">· {r.roleLabel}</span></div>
+            <div className="text-sm text-mute">{r.email}{r.phone ? ` · ${r.phone}` : ''}</div>
+            <div className="text-xs text-mute">{fmtDT(r.createdAt)} · {r.emailVerified ? 'email terverifikasi' : 'email belum diverifikasi (server email belum aktif)'}{r.decidedBy ? ` · diputuskan ${r.decidedBy}` : ''}{r.reason ? ` · ${r.reason}` : ''}</div>
+          </div>
+          {r.status === 'pending' && data.canApprove && <div className="flex gap-2">
+            <Btn size="sm" kind="ok" onClick={() => act(r, 'approve')}>Setujui</Btn>
+            <Btn size="sm" kind="ghost" onClick={() => act(r, 'reject')}>Tolak</Btn>
+          </div>}
+          {r.status === 'pending' && !data.canApprove && <span className="text-xs text-mute">Menunggu Admin</span>}
+        </div>))}</div>
+    </Card>
+  )
+}
+
 function Users() {
   const { masters, notify, user } = useApp()
   const { data, reload } = useAsync(() => api('/users'), [])
+  const { data: rq, reload: reloadRoles } = useAsync(() => api('/roles'), [])
   const [nu, setNu] = useState(null)
-  const roles = ['CS Agent', 'CS Lead', 'Manager Area', 'Ops/QC', 'Viewer', ...(user.role === 'Admin' ? ['Admin'] : [])]
-  const act = async (u, body, msg) => { try { await api('/users/' + u.id, { method: 'PATCH', body }); notify(msg); reload() } catch (e) { notify(e.message, 'err') } }
+  const [showOff, setShowOff] = useState(false)
+  const roles = (rq?.roles || []).filter((r) => r.role !== 'Admin' || user.role === 'Admin')
+  const refresh = () => { reload(); reloadRoles() }
+  const act = async (u, body, msg) => { try { await api('/users/' + u.id, { method: 'PATCH', body }); notify(msg); refresh() } catch (e) { notify(e.message, 'err') } }
+  const rows = (data || []).filter((u) => showOff || u.active)
   return (
-    <Card className="p-4">
-      <div className="flex justify-between mb-3"><h3 className="font-bold">User & peran</h3><Btn size="sm" onClick={() => setNu({ name: '', role: 'CS Agent', pin: '', areas: [] })}>+ User</Btn></div>
-      <div className="text-xs text-mute mb-3">Admin/CS Lead: semua · CS Agent: catat & tangani case · Manager Area: lihat case areanya, isi root cause · Ops/QC: lihat, isi root cause · Viewer: lihat saja, nomor HP disamarkan.</div>
-      <table className="w-full text-sm"><tbody>{data?.map((u) => (
-        <tr key={u.id} className="border-t border-line"><td className="p-2 font-semibold">{u.name}{u.locked && <span className="ml-2 text-xs text-brick">terkunci</span>}</td><td className="p-2">{u.role}</td><td className="p-2 text-xs text-mute">{u.areas.join(', ')}</td><td className="p-2">{u.active ? 'Aktif' : 'Nonaktif'}</td>
-          <td className="p-2 text-right space-x-1 whitespace-nowrap">
-            <Btn size="sm" kind="ghost" onClick={() => { const p = prompt(`PIN baru 6 digit untuk ${u.name}`); if (p) act(u, { pin: p }, 'PIN direset') }}>Reset PIN</Btn>
-            {u.locked && <Btn size="sm" kind="ghost" onClick={() => act(u, { unlock: true }, 'Kunci dibuka')}>Buka kunci</Btn>}
-            {u.id !== user.id && <Btn size="sm" kind="ghost" onClick={() => act(u, { active: !u.active }, u.active ? 'Dinonaktifkan' : 'Diaktifkan')}>{u.active ? 'Nonaktifkan' : 'Aktifkan'}</Btn>}
-          </td></tr>))}</tbody></table>
-      <Sheet open={!!nu} onClose={() => setNu(null)} title="Tambah user">
-        {nu && <div className="space-y-3">
-          <Field label="Nama"><input className={inputCls} value={nu.name} onChange={(e) => setNu({ ...nu, name: e.target.value })} /></Field>
-          <Field label="Peran"><div className="flex flex-wrap gap-2">{roles.map((r) => <Chip key={r} active={nu.role === r} onClick={() => setNu({ ...nu, role: r })}>{r}</Chip>)}</div></Field>
-          {nu.role === 'Manager Area' && <Field label="Area"><div className="flex flex-wrap gap-2">{masters.areas.map((a) => <Chip key={a} active={nu.areas.includes(a)} onClick={() => setNu({ ...nu, areas: nu.areas.includes(a) ? nu.areas.filter((x) => x !== a) : [...nu.areas, a] })}>{a}</Chip>)}</div></Field>}
-          <Field label="PIN awal (6 digit)"><input className={inputCls} inputMode="numeric" maxLength={6} value={nu.pin} onChange={(e) => setNu({ ...nu, pin: e.target.value.replace(/\D/g, '') })} /></Field>
-          <Btn className="w-full" disabled={!nu.name || nu.pin.length !== 6} onClick={async () => { try { await api('/users', { method: 'POST', body: nu }); setNu(null); reload(); notify('User dibuat') } catch (e) { notify(e.message, 'err') } }}>Simpan</Btn>
-        </div>}
-      </Sheet>
-    </Card>
+    <div className="space-y-4">
+      <Registrations onChange={refresh} />
+      <Card className="p-4">
+        <div className="flex flex-wrap justify-between gap-2 mb-3"><h3 className="font-bold">User & peran</h3>
+          <div className="flex gap-2 items-center"><label className="text-xs flex items-center gap-1"><input type="checkbox" checked={showOff} onChange={(e) => setShowOff(e.target.checked)} />Tampilkan nonaktif</label>
+            <Btn size="sm" onClick={() => setNu({ name: '', email: '', role: 'CS Agent', pin: '', areas: [] })}>+ User</Btn></div></div>
+        <div className="text-xs text-mute mb-3">Kuota: CRM Supervisor 1 · Marketing Team Leader 1 · Customer Service 5 (user aktif). Manager Area, Ops/QC, Viewer tanpa kuota, dibuat Admin/CRM Supervisor.</div>
+        <div className="overflow-x-auto"><table className="w-full text-sm"><tbody>{rows.map((u) => (
+          <tr key={u.id} className={`border-t border-line ${u.active ? '' : 'opacity-50'}`}>
+            <td className="p-2"><div className="font-semibold">{u.name}{u.locked && <span className="ml-2 text-xs text-brick">terkunci</span>}</div><div className="text-xs text-mute">{u.email || 'login dengan nama'}</div></td>
+            <td className="p-2">{u.roleLabel}</td><td className="p-2 text-xs text-mute">{u.areas.join(', ')}</td><td className="p-2">{u.active ? 'Aktif' : 'Nonaktif'}</td>
+            <td className="p-2 text-right space-x-1 whitespace-nowrap">
+              <Btn size="sm" kind="ghost" onClick={() => { const p = prompt(`PIN baru 6 digit untuk ${u.name}`); if (p) act(u, { pin: p }, 'PIN direset') }}>Reset PIN</Btn>
+              {u.locked && <Btn size="sm" kind="ghost" onClick={() => act(u, { unlock: true }, 'Kunci dibuka')}>Buka kunci</Btn>}
+              {u.id !== user.id && <Btn size="sm" kind="ghost" onClick={() => act(u, { active: !u.active }, u.active ? 'Dinonaktifkan' : 'Diaktifkan')}>{u.active ? 'Nonaktifkan' : 'Aktifkan'}</Btn>}
+            </td></tr>))}</tbody></table></div>
+        <Sheet open={!!nu} onClose={() => setNu(null)} title="Tambah user">
+          {nu && <div className="space-y-3">
+            <Field label="Nama"><input className={inputCls} value={nu.name} onChange={(e) => setNu({ ...nu, name: e.target.value })} /></Field>
+            <Field label="Email kantor" hint={`Dipakai untuk login. Wajib @${rq?.domain || 'citarasakuliner.com'}.`}><input className={inputCls} type="email" value={nu.email} onChange={(e) => setNu({ ...nu, email: e.target.value })} /></Field>
+            <Field label="Peran"><div className="flex flex-wrap gap-2">{roles.map((r) => {
+              const full = r.slots && r.used >= r.slots
+              return <Chip key={r.role} active={nu.role === r.role} disabled={full} className={full ? 'opacity-50' : ''} onClick={() => setNu({ ...nu, role: r.role })}>{r.label}{r.slots ? ` (${r.used}/${r.slots})` : ''}</Chip>
+            })}</div></Field>
+            {nu.role === 'Manager Area' && <Field label="Area"><div className="flex flex-wrap gap-2">{masters.areas.map((a) => <Chip key={a} active={nu.areas.includes(a)} onClick={() => setNu({ ...nu, areas: nu.areas.includes(a) ? nu.areas.filter((x) => x !== a) : [...nu.areas, a] })}>{a}</Chip>)}</div></Field>}
+            <Field label="PIN awal (6 digit)"><input className={inputCls} inputMode="numeric" maxLength={6} value={nu.pin} onChange={(e) => setNu({ ...nu, pin: e.target.value.replace(/\D/g, '') })} /></Field>
+            <Btn className="w-full" disabled={!nu.name || nu.pin.length !== 6} onClick={async () => { try { await api('/users', { method: 'POST', body: nu }); setNu(null); refresh(); notify('User dibuat') } catch (e) { notify(e.message, 'err') } }}>Simpan</Btn>
+          </div>}
+        </Sheet>
+      </Card>
+    </div>
   )
 }
 

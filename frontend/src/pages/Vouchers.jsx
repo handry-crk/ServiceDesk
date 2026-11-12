@@ -33,7 +33,7 @@ export default function Vouchers() {
       </div>
       <div className="flex flex-wrap gap-2 mb-3">
         {['', 'Tersedia', 'Diterbitkan', 'Terpakai', 'Hangus'].map((s) => <Chip key={s} active={f.status === s} onClick={() => setF({ ...f, status: s })}>{s || 'Semua'}</Chip>)}
-        <select className={inputCls + ' !min-h-[40px] w-auto'} value={f.jenis} onChange={(e) => setF({ ...f, jenis: e.target.value })}><option value="">Semua jenis</option>{masters?.voucherJenis.map((j) => <option key={j}>{j}</option>)}</select>
+        <select className={inputCls + ' !min-h-[40px] !w-auto'} value={f.jenis} onChange={(e) => setF({ ...f, jenis: e.target.value })}><option value="">Semua jenis</option>{masters?.voucherJenis.map((j) => <option key={j}>{j}</option>)}</select>
       </div>
       <Card className="overflow-x-auto">
         <table className="w-full text-sm"><thead className="bg-brick text-white text-left"><tr>{['Kode', 'Jenis', 'Status', 'Case', 'Diterbitkan', 'Dipakai', 'Outlet', 'Catatan', ''].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}</tr></thead>

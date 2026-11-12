@@ -8,6 +8,8 @@ import { api, useApp, useAsync, fmtNum, fmtPct, fmtRp, fmtMin, presets, fmtD } f
 import { Card, ErrorBox, Skeleton, PeriodPicker, StatusPill, Info, Delta, CARA_HITUNG, LevelBadge, inputCls } from '../ui.jsx'
 
 const BRICK = '#B42F27', MUTE = '#8A8178', GRID = '#EDE6D9'
+const SEL = 'h-9 w-full md:w-auto min-w-0 appearance-none rounded-lg border border-line bg-white pl-2 pr-5 md:pl-3 md:pr-8 text-[13px] md:text-sm font-medium truncate focus:outline-none focus:ring-2 focus:ring-brick/40'
+const SEL_STYLE = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238A8178' stroke-width='1.5' fill='none'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center', backgroundSize: '9px' }
 const LEVEL_COLOR = { Minor: '#9C948B', Major: '#C98A1B', Critical: BRICK }
 const axis = { fontSize: 12, fill: MUTE }
 
@@ -351,19 +353,22 @@ export default function Dashboard() {
   const { data: d, loading, error } = useAsync(() => view === 'periode' ? api('/dashboard', { params: { ...period, brand, area, line } }) : Promise.resolve(null), [period.from, period.to, brand, area, line, view])
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+      <div className="mb-3">
         <div><h1 className="text-2xl font-extrabold">Dashboard Service Excellence</h1>
           {d && view === 'periode' && <p className="text-sm text-mute">{fmtD(d.period.from)} – {fmtD(d.period.to)} · dibandingkan {fmtD(d.period.prevFrom)} – {fmtD(d.period.prevTo)}</p>}</div>
-        {!['frozen'].includes(view) && <div className="flex flex-wrap gap-2">
-          <select className={inputCls + ' !min-h-[40px] w-auto'} value={line} onChange={(e) => setLine(e.target.value)} title="Lini bisnis"><option value="">Semua lini</option><option value="outlet">Outlet & gerobak</option><option value="frozen">Frozen food</option></select>
-          <select className={inputCls + ' !min-h-[40px] w-auto'} value={brand} onChange={(e) => setBrand(e.target.value)}><option value="">Semua brand</option>{masters?.brands.map((b) => <option key={b}>{b}</option>)}</select>
-          <select className={inputCls + ' !min-h-[40px] w-auto'} value={area} onChange={(e) => setArea(e.target.value)}><option value="">Semua area</option>{masters?.areas.map((b) => <option key={b}>{b}</option>)}</select>
-        </div>}
       </div>
-      <div className="flex flex-wrap gap-1 mb-4 bg-white border border-line rounded-xl p-1 w-fit">
-        {[['periode', 'Ringkasan periode'], ['komparasi', 'Komparasi week / month'], ['frozen', 'Frozen food'], ['complimentary', 'Tracker complimentary']].map(([k, l]) => (
-          <button key={k} onClick={() => setSp(k === 'periode' ? {} : { view: k })} className={`px-4 min-h-[40px] rounded-lg text-sm font-semibold ${view === k ? 'bg-brick text-white' : 'hover:bg-cream'}`}>{l}</button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap gap-1 bg-white border border-line rounded-xl p-1">
+          {[['periode', 'Ringkasan periode'], ['komparasi', 'Komparasi week / month'], ['frozen', 'Frozen food'], ['complimentary', 'Tracker complimentary']].map(([k, l]) => (
+            <button key={k} onClick={() => setSp(k === 'periode' ? {} : { view: k })} className={`px-3 md:px-4 min-h-[38px] rounded-lg text-sm font-semibold ${view === k ? 'bg-brick text-white' : 'hover:bg-cream'}`}>{l}</button>
+          ))}
+        </div>
+        {view !== 'frozen' && <div className="grid grid-cols-3 gap-2 w-full md:w-auto md:flex md:items-center">
+          <select className={SEL} style={SEL_STYLE} value={line} onChange={(e) => setLine(e.target.value)} title="Lini bisnis" aria-label="Lini bisnis"><option value="">Semua lini</option><option value="outlet">Outlet & gerobak</option><option value="frozen">Frozen food</option></select>
+          <select className={SEL} style={SEL_STYLE} value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Brand"><option value="">Semua brand</option>{masters?.brands.map((b) => <option key={b}>{b}</option>)}</select>
+          <select className={SEL} style={SEL_STYLE} value={area} onChange={(e) => setArea(e.target.value)} aria-label="Area"><option value="">Semua area</option>{masters?.areas.map((b) => <option key={b}>{b}</option>)}</select>
+          {(line || brand || area) && <button className="col-span-3 text-left text-xs text-brick underline" onClick={() => { setLine(''); setBrand(''); setArea('') }}>Reset</button>}
+        </div>}
       </div>
       {view === 'frozen' ? <Frozen /> : view === 'complimentary' ? <Kompensasi brand={brand} area={area} line={line} /> : view === 'komparasi' ? <Compare brand={brand} area={area} line={line} /> : <>
       <div className="mb-4"><PeriodPicker value={period} onChange={setPeriod} /></div>

@@ -31,7 +31,7 @@ function ReviewTab() {
       <div className="flex flex-wrap gap-2 mb-3">
         {['', ...(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood'])].map((x) => <Chip key={x} active={f.platform === x} onClick={() => setF({ ...f, platform: x })}>{x || 'Semua platform'}</Chip>)}
         {['', 'Critical', 'Major', 'Minor'].map((x) => <Chip key={'l' + x} active={f.level === x} onClick={() => setF({ ...f, level: x })}>{x || 'Semua level'}</Chip>)}
-        <select className={inputCls + ' !min-h-[40px] w-auto'} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">Semua status</option>{STATUS.map((s) => <option key={s}>{s}</option>)}</select>
+        <select className={inputCls + ' !min-h-[40px] !w-auto'} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}><option value="">Semua status</option>{STATUS.map((s) => <option key={s}>{s}</option>)}</select>
       </div>
       <ErrorBox error={error} />
       {loading && !data ? <Skeleton h="h-64" /> : (
@@ -91,7 +91,7 @@ function RatingTab() {
     <>
       <ErrorBox error={error} />
       <div className="flex flex-wrap gap-2 mb-3">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood']).map((x) => <Chip key={x} active={plat === x} onClick={() => { setPlat(x); setMonth('') }}>{x}</Chip>)}
-        <select className={inputCls + ' !min-h-[40px] w-auto'} value={m || ''} onChange={(e) => setMonth(e.target.value)}>{months.map((x) => <option key={x}>{x}</option>)}</select></div>
+        <select className={inputCls + ' !min-h-[40px] !w-auto'} value={m || ''} onChange={(e) => setMonth(e.target.value)}>{months.map((x) => <option key={x}>{x}</option>)}</select></div>
       {plat === 'GrabFood' && <p className="text-xs text-mute mb-2">Export GrabFood hanya berisi rata-rata rating harian, jadi Jumlah Rating = jumlah hari outlet punya rating.</p>}
       <div className="grid grid-cols-3 gap-3 mb-4">
         <Card className="p-4"><div className="text-xs text-mute">Rata-rata</div><div className="text-2xl font-extrabold">{tot.n ? (tot.s / tot.n).toFixed(2).replace('.', ',') : '–'}</div></Card>

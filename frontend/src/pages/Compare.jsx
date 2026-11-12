@@ -79,7 +79,7 @@ export default function Compare({ brand, area, line, meeting }) {
         <span className="mx-1 text-line">|</span>
         {nOpts.map((x) => <Chip key={x} active={n === x} onClick={() => setN(x)}>{x} {mode === 'week' ? 'minggu' : 'bulan'}</Chip>)}
         <span className="mx-1 text-line">|</span>
-        <label className="text-sm flex items-center gap-2">s.d.<input type="date" className={inputCls + ' !min-h-[40px] w-auto'} value={end} max={todayWIB()} onChange={(e) => setEnd(e.target.value || todayWIB())} /></label>
+        <label className="text-sm flex items-center gap-2">s.d.<input type="date" className={inputCls + ' !min-h-[40px] !w-auto'} value={end} max={todayWIB()} onChange={(e) => setEnd(e.target.value || todayWIB())} /></label>
         </>}
         <span className="text-xs text-mute w-full">Minggu = Senin–Minggu. Periode terakhir yang belum penuh ditandai “berjalan” — bandingkan dengan hati-hati.</span>
       </Card>

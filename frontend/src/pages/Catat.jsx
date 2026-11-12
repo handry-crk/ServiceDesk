@@ -163,7 +163,7 @@ export default function Catat() {
           <div className="flex flex-wrap gap-2 items-center">
             <Chip active={!waktu} onClick={() => setWaktu(null)}>Sekarang</Chip>
             <Chip onClick={() => quick(15)}>−15 mnt</Chip><Chip onClick={() => quick(60)}>−1 jam</Chip>
-            <input type="datetime-local" className={inputCls + ' w-auto !min-h-[40px]'} value={waktu || ''} max={toLocalInput()} onChange={(e) => setWaktu(e.target.value || null)} />
+            <input type="datetime-local" className={inputCls + ' !w-auto !min-h-[40px]'} value={waktu || ''} max={toLocalInput()} onChange={(e) => setWaktu(e.target.value || null)} />
           </div>
           <div className="text-xs text-mute mt-1">Isi jam pesan customer <b>masuk</b> (lihat di chat), bukan jam Anda mencatat.</div>
         </Field>

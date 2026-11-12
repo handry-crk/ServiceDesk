@@ -114,7 +114,7 @@ function Audits({ lead }) {
         <p>Setiap Senin pagi sistem memilih case acak per CS dari minggu lalu (separuh dari case berjam manual). CRM Supervisor membuka chat asli lalu menandai <b>cocok</b> / <b>tidak cocok</b>. Hasilnya masuk laporan per CS dan slide meeting.</p>
         <div className="flex flex-wrap items-center gap-2">
           {lead && <Btn size="sm" onClick={make}>Buat sampel minggu lalu</Btn>}
-          {data?.length > 0 && <select className={inputCls + ' !min-h-[36px] w-auto'} value={i} onChange={(e) => setI(Number(e.target.value))}>
+          {data?.length > 0 && <select className={inputCls + ' !min-h-[36px] !w-auto'} value={i} onChange={(e) => setI(Number(e.target.value))}>
             {data.map((x, k) => <option key={x.id} value={k}>Minggu {fmtD(x.weekStart)} – {fmtD(x.weekEnd)}</option>)}</select>}
         </div>
       </Card>

@@ -13,7 +13,7 @@ function Tile({ label, value, sub, info, tone }) {
   return (
     <Card className="p-4">
       <div className="text-sm text-mute font-semibold">{label}{info && <Info text={info} />}</div>
-      <div className={`text-3xl font-extrabold tabnum my-1 ${tone || ''}`}>{value}</div>
+      <div className={`text-2xl md:text-3xl font-extrabold tabnum my-1 break-words ${tone || ''}`}>{value}</div>
       {sub && <div className="text-xs text-mute">{sub}</div>}
     </Card>
   )
@@ -44,7 +44,7 @@ export function KompSummary({ d }) {
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       <Tile label="Case diberi complimentary" value={fmtNum(s.cases)} sub={`${fmtPct(s.pctDiberi)} komplain diberi complimentary (${s.komplainDiberi}/${s.komplainTotal}) · ${s.luarStandard} di luar standard`} />
       <Tile label="Biaya complimentary" value={fmtRp(s.biaya)} sub={`Di luar standard ${fmtRp(s.biayaLuarStandard)}`} />
-      <Tile label="Voucher terpakai" value={fmtPct(s.redemption)} info="Terpakai ÷ (terpakai + hangus). Voucher yang masih aktif belum dihitung."
+      <Tile label="Kode terpakai" value={fmtPct(s.redemption)} info="Terpakai ÷ (terpakai + hangus). Kode yang masih aktif belum dihitung."
         sub={`${s.terpakai} terpakai · ${s.hangus} hangus · ${s.aktif} masih aktif${s.avgHariDipakai != null ? ` · rata² dipakai ${fmtNum(s.avgHariDipakai)} hari` : ''}`} />
       <Tile label="Kode belum dipakai" value={fmtNum(s.aktif)} tone={s.segeraHangus ? 'text-brick' : ''}
         sub={`Nilai ${fmtRp(s.nilaiAktif)} · ${s.segeraHangus} hangus ≤ 7 hari${s.tanpaKode ? ` · ${s.tanpaKode} case lama tanpa kode` : ''}`} info={`Kode voucher / porsi pengganti / kit berlaku ${d.expiryDays} hari sejak diterbitkan; refund & cover pengobatan tanpa batas. Ingatkan customer sebelum hangus.`} />

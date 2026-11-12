@@ -145,7 +145,7 @@ export function KodeLookup({ onDone }) {
         <div className="text-mute">Diterbitkan {fmtDT(v.tanggalDiterbitkan)} · {v.kadaluarsa ? <span className={expired ? 'text-brick font-semibold' : ''}>berlaku s/d {fmtD(v.kadaluarsa)}{expired ? ' (sudah lewat)' : ''}</span> : 'tanpa batas waktu'}</div>
         {v.status === 'Terpakai' && <div>Dipakai {fmtDT(v.tanggalDipakai)}{v.outletPemakaian ? ` di ${v.outletPemakaian}` : ''}{v.dipakaiOleh ? ` · dicatat ${v.dipakaiOleh}` : ''}</div>}
         {v.status === 'Diterbitkan' && !expired && <div className="flex flex-wrap gap-2 items-center pt-2">
-          <select className={inputCls + ' !min-h-[40px] w-auto max-w-[220px]'} value={outlet} onChange={(e) => setOutlet(e.target.value)}>
+          <select className={inputCls + ' !min-h-[40px] !w-auto max-w-[220px]'} value={outlet} onChange={(e) => setOutlet(e.target.value)}>
             <option value="">Outlet pemakaian…</option>{(masters?.outlets || []).map((o) => <option key={o.id}>{o.name}</option>)}</select>
           <Btn kind="ok" onClick={pakai}>Tandai terpakai / sudah diterima</Btn>
         </div>}

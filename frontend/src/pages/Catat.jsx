@@ -4,6 +4,7 @@ import { api, useApp, toLocalInput, fromLocalInput, compressImage, WRITERS } fro
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge } from '../ui.jsx'
 import { Combo, levelItemBadge } from '../components.jsx'
 
+const FROZEN_KEYS = ['produk', 'ekspedisi', 'noResi', 'kodeProduksi', 'qtyPesan', 'qtyDiterima']
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
 
 export default function Catat() {
@@ -15,7 +16,7 @@ export default function Catat() {
   const [ringkasan, setRingkasan] = useState('')
   const [waktu, setWaktu] = useState(null) // null = sekarang
   const [more, setMore] = useState(false)
-  const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '' })
+  const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
   const [photos, setPhotos] = useState([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -41,6 +42,8 @@ export default function Catat() {
   const tfrt = level === 'Critical' ? Math.min(ch?.targetFrt || 5, masters?.criticalFrt || 30) : ch?.targetFrt
   const frozen = outlet?.type === 'online_frozen'
   const cc = !level ? '-' : level === 'Minor' ? (frozen && subJenis === 'Kesalahan Kemasan' ? 'Factory' : 'Operasional') : level === 'Major' ? (frozen ? 'Team Frozen' : 'Operasional') : level === 'Critical' ? ((['Kontaminasi', 'Keracunan', 'Undercooked'].includes(subJenis) || (frozen && subJenis === 'Penurunan Mutu (tidak dapat dikonsumsi)')) ? 'Factory/Operasional (cek root cause)' : 'Operasional') : 'Belum Diatur'
+  const needBatch = frozen && (masters?.needsBatch || []).includes(subJenis)
+  const needQty = frozen && ['Missing Item', 'Wrong Item', 'Cacat Produksi'].includes(subJenis)
   const sla = { Minor: '1 hari', Major: '2 hari', Critical: '3 hari' }[level] || 'belum diatur'
 
   if (!can(...WRITERS)) return <ErrorBox error={{ message: 'Peran Anda tidak bisa mencatat case.' }} />
@@ -68,7 +71,9 @@ export default function Catat() {
   const submit = async (force = false) => {
     setBusy(true); setErr(null)
     try {
-      const body = { channel, outletId, subJenis, ringkasan, waktuMasuk: waktu ? fromLocalInput(waktu) : null, photos, force, ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v)) }
+      const ex = Object.fromEntries(Object.entries(extra).filter(([k, v]) => v && (frozen || !FROZEN_KEYS.includes(k))))
+      for (const k of ['qtyPesan', 'qtyDiterima']) if (ex[k]) ex[k] = Number(ex[k])
+      const body = { channel, outletId, subJenis, ringkasan, waktuMasuk: waktu ? fromLocalInput(waktu) : null, photos, force, ...ex }
       const c = await api('/cases', { method: 'POST', body })
       ls.set('sd_last_channel', channel)
       ls.set('sd_recent_outlets', [outletId, ...recentOutlets.filter((x) => x !== outletId)].slice(0, 5))
@@ -76,7 +81,7 @@ export default function Catat() {
         label: 'Sudah dibalas', fn: async () => { await api(`/cases/${c.caseId}/respond`, { method: 'POST' }); notify(`${c.caseId} ditandai sudah dibalas`) },
       })
       setOutletId(''); setSubJenis(''); setRingkasan(''); setWaktu(null); setPhotos([]); setDup(null)
-      setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '' })
+      setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
       if (c.level === 'Critical') nav('/case/' + c.caseId)
     } catch (e) {
       if (e.status === 409) setDup(e.detail)
@@ -84,6 +89,7 @@ export default function Catat() {
     } finally { setBusy(false) }
   }
 
+  const setX = (k, v) => setExtra((x) => ({ ...x, [k]: v }))
   const quick = (min) => setWaktu(toLocalInput(new Date(Date.now() - min * 60000).toISOString()))
   const ok = channel && outletId && subJenis && ringkasan.trim()
 
@@ -121,6 +127,28 @@ export default function Catat() {
           <Field label={`No. Pesanan ${channel}`} hint="Disarankan diisi: dipakai untuk cek duplikat dan klaim ke platform.">
             <input className={inputCls} value={extra.orderNo} onChange={(e) => setExtra({ ...extra, orderNo: e.target.value.trim() })} placeholder={channel === 'GoFood' ? 'F-1234567890' : channel === 'GrabFood' ? 'A-XXXXXXXX' : 'No. pesanan'} />
           </Field>
+        )}
+        {frozen && (
+          <div className="rounded-xl border border-line p-3 space-y-3 bg-white">
+            <div className="text-sm font-bold">Detail frozen food</div>
+            <Field label="Produk" hint="Pilih dari daftar atau ketik nama produk di pesanan.">
+              <input className={inputCls} list="frozen-products" value={extra.produk} onChange={(e) => setX('produk', e.target.value)} placeholder="Mis. Mozza AP, Mix 5 pcs Mozza" />
+              <datalist id="frozen-products">{(masters?.frozenProducts || []).map((p) => <option key={p} value={p} />)}</datalist>
+            </Field>
+            <Field label="Ekspedisi">
+              <div className="flex flex-wrap gap-2">{(masters?.couriers || []).map((k) => <Chip key={k} active={extra.ekspedisi === k} onClick={() => setX('ekspedisi', extra.ekspedisi === k ? '' : k)}>{k}</Chip>)}</div>
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Kode produksi" hint={needBatch ? 'Penting untuk masalah produk: minta customer foto kode di kemasan.' : 'Tercetak di kemasan.'}>
+                <input className={inputCls + (needBatch && !extra.kodeProduksi ? ' border-warn' : '')} value={extra.kodeProduksi} onChange={(e) => setX('kodeProduksi', e.target.value.toUpperCase())} placeholder="Mis. B2410" />
+              </Field>
+              <Field label="No. resi"><input className={inputCls} value={extra.noResi} onChange={(e) => setX('noResi', e.target.value.trim())} /></Field>
+              {needQty && <>
+                <Field label="Qty dipesan (pcs)"><input className={inputCls} inputMode="numeric" value={extra.qtyPesan} onChange={(e) => setX('qtyPesan', e.target.value.replace(/\D/g, ''))} /></Field>
+                <Field label="Qty diterima baik (pcs)"><input className={inputCls} inputMode="numeric" value={extra.qtyDiterima} onChange={(e) => setX('qtyDiterima', e.target.value.replace(/\D/g, ''))} /></Field>
+              </>}
+            </div>
+          </div>
         )}
         {channel === 'WhatsApp' && (
           <Field label="No. WhatsApp customer" hint="Disarankan: dipakai untuk kirim survei CSAT dengan 1 klik setelah case Closed.">

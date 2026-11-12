@@ -5,6 +5,7 @@ import { Btn, Card, Chip, Field, Sheet, Skeleton, ErrorBox, LevelBadge, StatusBa
 import { SlaChip, useNow, Combo, levelItemBadge } from '../components.jsx'
 
 const EV = { created: 'Case dibuat', responded: 'Sudah dibalas', resolved: 'Resolved', closed: 'Closed', reopened: 'Dibuka ulang', note: 'Catatan', level_changed: 'Level diubah', time_corrected: 'Waktu dikoreksi', voucher_issued: 'Voucher diterbitkan', edited: 'Data diubah', csat: 'CSAT customer' }
+const TL = { waktuMasuk: 'Waktu masuk', waktuFirstResponse: 'Waktu dibalas', waktuResolved: 'Resolved', waktuClosed: 'Closed' }
 const CC_ROOT = 'Factory/Operasional (cek root cause)'
 
 const copy = async (t, notify, msg = 'Tersalin') => { try { await navigator.clipboard.writeText(t); notify(msg) } catch { notify('Gagal menyalin', 'err') } }
@@ -29,6 +30,7 @@ export default function CaseDetail() {
   if (loading && !c) return <Skeleton h="h-96" />
   if (error) return <ErrorBox error={error} />
   const crit = c.level === 'Critical'
+  const frozen = c.outletType === 'online_frozen'
 
   const Row = ({ k, v }) => <div className="flex justify-between gap-3 py-1.5 border-b border-line/60 last:border-0 text-sm"><span className="text-mute">{k}</span><span className="text-right font-medium">{v ?? '–'}</span></div>
 
@@ -47,17 +49,19 @@ export default function CaseDetail() {
         {c.dataIssues?.length > 0 && <div className="flex flex-wrap gap-1 mt-3">{c.dataIssues.map((i) => <span key={i} className={`text-xs px-2 py-0.5 rounded-md ${i.startsWith('Info:') ? 'bg-cream text-mute' : 'bg-[#FBF1DC] text-[#7A5410]'}`}>{i.replace('Info: ', '')}</span>)}</div>}
         {writer && (
           <div className="flex flex-wrap gap-2 mt-4 no-print">
-            {c.status === 'Open' && <Btn kind="ok" size="lg" onClick={() => act('respond', undefined, 'Ditandai sudah dibalas')}>Sudah dibalas</Btn>}
+            {!c.waktuFirstResponse && <Btn kind="ok" size="lg" onClick={() => act('respond', undefined, 'Ditandai sudah dibalas')}>Sudah dibalas</Btn>}
+            {!c.waktuFirstResponse && <Btn kind="ghost" onClick={() => setSheet('respond')}>Dibalas jam lain…</Btn>}
             {['Open', 'Responded'].includes(c.status) && <Btn size="lg" onClick={() => setSheet('resolve')}>Selesai (Resolved)</Btn>}
             {c.status === 'Resolved' && <Btn size="lg" onClick={() => setSheet('close')}>Closed (customer confirm)</Btn>}
             {['Resolved', 'Closed'].includes(c.status) && <Btn kind="ghost" onClick={() => setSheet('reopen')}>Buka ulang</Btn>}
             <Btn kind="ghost" onClick={() => setSheet('note')}>Tambah catatan</Btn>
             <Btn kind="ghost" onClick={() => setSheet('level')}>Ubah level</Btn>
             <Btn kind="ghost" onClick={() => setSheet('edit')}>Ubah data</Btn>
+            {c.waktuFirstResponse && !lead && <Btn kind="ghost" onClick={() => setSheet('fr')}>Ubah waktu dibalas</Btn>}
             {lead && <Btn kind="ghost" onClick={() => setSheet('time')}>Koreksi waktu</Btn>}
           </div>
         )}
-        {limited && <div className="flex flex-wrap gap-2 mt-4"><Btn kind="ghost" onClick={() => setSheet('rootcause')}>Isi root cause / cost center</Btn><Btn kind="ghost" onClick={() => setSheet('note')}>Tambah catatan</Btn></div>}
+        {limited && <div className="flex flex-wrap gap-2 mt-4"><Btn kind="ghost" onClick={() => setSheet('rootcause')}>{frozen ? 'Isi root cause / cost center / kode produksi' : 'Isi root cause / cost center'}</Btn><Btn kind="ghost" onClick={() => setSheet('note')}>Tambah catatan</Btn></div>}
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -74,13 +78,20 @@ export default function CaseDetail() {
         <Card className="p-4">
           <h3 className="font-bold mb-2">Waktu & SLA</h3>
           <Row k="Masuk" v={fmtDT(c.waktuMasuk) + (c.hasTime === false ? ' (tanpa jam)' : '')} />
-          <Row k="First response" v={fmtDT(c.waktuFirstResponse)} /><Row k="Resolved" v={fmtDT(c.waktuResolved)} /><Row k="Closed" v={fmtDT(c.waktuClosed)} />
+          <Row k="First response" v={<span>{fmtDT(c.waktuFirstResponse)}{c.frtManual && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-cream text-mute font-semibold" title="Jam dibalas diisi manual oleh CS">dicatat manual</span>}</span>} /><Row k="Resolved" v={fmtDT(c.waktuResolved)} /><Row k="Closed" v={fmtDT(c.waktuClosed)} />
           <Row k="FRT" v={<span className={c.slaResponseOk === false ? 'text-brick' : c.slaResponseOk ? 'text-ok' : ''}>{fmtMin(c.frtMin)} / target {c.targetFrtMin} mnt</span>} />
           <Row k="FRT jam kerja" v={fmtMin(c.frtWorkMin)} />
           <Row k="Resolusi" v={<span className={c.resolutionSlaOk === false ? 'text-brick' : c.resolutionSlaOk ? 'text-ok' : ''}>{fmtMin(c.resolutionMin)}{c.targetResolutionMin ? ` / target ${fmtMin(c.targetResolutionMin)}` : ''}</span>} />
           <Row k="Same day" v={c.sameDay === null ? '–' : c.sameDay ? 'Ya' : 'Tidak'} /><Row k="Follow-up ulang" v={c.followUpUlang} />
           <Row k="Dibuka ulang" v={c.reopenCount ? `${c.reopenCount}×` : 'Tidak'} /><Row k="CSAT" v={c.csat ? `${c.csat}/5` : '–'} />
         </Card>
+        {frozen && <Card className="p-4">
+          <h3 className="font-bold mb-2">Frozen food</h3>
+          <Row k="Produk" v={c.produk} />
+          <Row k="Kode produksi" v={c.kodeProduksi || <span className={(masters?.needsBatch || []).includes(c.subJenis) ? 'text-[#7A5410]' : 'text-mute'}>Belum diisi</span>} />
+          <Row k="Ekspedisi" v={c.ekspedisi} /><Row k="No. resi" v={c.noResi} />
+          {(c.qtyPesan != null || c.qtyDiterima != null) && <Row k="Qty dipesan / diterima baik" v={`${c.qtyPesan ?? '–'} / ${c.qtyDiterima ?? '–'} pcs`} />}
+        </Card>}
         <Card className="p-4">
           <h3 className="font-bold mb-2">Customer & sumber</h3>
           <Row k="Channel" v={c.channel} /><Row k="Brand" v={c.brand} /><Row k="Tipe" v={c.tipe} /><Row k="Valid" v={c.valid} />
@@ -104,7 +115,8 @@ export default function CaseDetail() {
                 {e.payload?.kompensasi && <div className="text-mute">{e.payload.kompensasi}{e.payload.nilai ? ` · ${fmtRp(e.payload.nilai)}` : ''}</div>}
                 {e.payload?.kode && <div className="text-mute">Kode {e.payload.kode}</div>}
                 {e.type === 'level_changed' && <div className="text-mute">{e.payload.from} → {e.payload.to}</div>}
-                {e.type === 'time_corrected' && <div className="text-mute">{e.payload.field}</div>}
+                {e.type === 'time_corrected' && <div className="text-mute">{TL[e.payload.field] || e.payload.field}: {fmtDT(e.payload.before)} → {fmtDT(e.payload.after)}</div>}
+                {e.type === 'responded' && e.payload?.backdatedMin > 0 && <div className="text-mute">Dicatat {fmtMin(e.payload.backdatedMin)} setelah membalas</div>}
               </li>
             ))}
             {c.events.length === 0 && <li className="text-sm text-mute">Data impor dari sheet lama.</li>}
@@ -130,6 +142,10 @@ export default function CaseDetail() {
       <SimpleSheet open={sheet === 'reopen'} onClose={close} title="Buka ulang case" label="Alasan dibuka ulang" onDone={(t) => act('reopen', { reason: t }, 'Case dibuka ulang')} />
       <SimpleSheet open={sheet === 'note'} onClose={close} title="Tambah catatan" label="Catatan" onDone={(t) => act('note', { text: t }, 'Catatan tersimpan')} />
       <LevelSheet open={sheet === 'level'} onClose={close} c={c} onDone={(b) => act('change-level', b, 'Level diubah')} />
+      <RespondSheet open={sheet === 'respond'} onClose={close} c={c} title="Sudah dibalas — jam lain"
+        onDone={({ at, reason }) => act('respond', { at, reason }, 'Ditandai sudah dibalas')} />
+      <RespondSheet open={sheet === 'fr'} onClose={close} c={c} title="Ubah waktu dibalas" edit
+        onDone={({ at, reason }) => act('correct-time', { field: 'waktuFirstResponse', value: at, reason }, 'Waktu dibalas diubah')} />
       <TimeSheet open={sheet === 'time'} onClose={close} c={c} onDone={(b) => act('correct-time', b, 'Waktu dikoreksi')} />
       <EditSheet open={sheet === 'edit' || sheet === 'rootcause'} limited={sheet === 'rootcause' || limited} onClose={close} c={c} masters={masters}
         onDone={async (b) => { try { setData(await api('/cases/' + id, { method: 'PATCH', body: b })); notify('Tersimpan'); close(); reload() } catch (e) { notify(e.message, 'err') } }} />
@@ -256,6 +272,37 @@ function LevelSheet({ open, onClose, c, onDone }) {
   )
 }
 
+function RespondSheet({ open, onClose, c, onDone, title, edit }) {
+  const [v, setV] = useState('')
+  const [r, setR] = useState('')
+  useEffect(() => { if (open) { setV(toLocalInput(edit && c.waktuFirstResponse ? c.waktuFirstResponse : undefined)); setR('') } }, [open])
+  const masuk = toLocalInput(c.waktuMasuk)
+  const at = v ? new Date(fromLocalInput(v)) : null
+  const back = at ? (Date.now() - at.getTime()) / 60000 : 0
+  const frt = at ? Math.round((at - new Date(c.waktuMasuk)) / 60000) : null
+  const errMsg = !v ? 'Isi jam dibalas.' : v < masuk ? 'Tidak boleh sebelum waktu masuk.' : back < -2 ? 'Tidak boleh di masa depan.'
+    : c.waktuResolved && at > new Date(c.waktuResolved) ? 'Tidak boleh setelah waktu Resolved.' : null
+  const needReason = edit || back > 60
+  const quick = (min) => setV(toLocalInput(new Date(Date.now() - min * 60000).toISOString()))
+  return (
+    <Sheet open={open} onClose={onClose} title={title}>
+      <div className="space-y-4">
+        <p className="text-sm text-mute">{edit ? 'Pakai bila jam balasan pertama ke customer tercatat salah.' : 'Pakai bila Anda sudah membalas customer lebih dulu dan baru mencatatnya sekarang.'} Isi jam <b>balasan pertama</b> yang sebenarnya — lihat di chat.</p>
+        <div className="text-sm">Masuk: <b>{fmtDT(c.waktuMasuk)}</b>{c.waktuFirstResponse && edit && <> · tercatat dibalas: <b>{fmtDT(c.waktuFirstResponse)}</b></>}</div>
+        {!edit && <div className="flex flex-wrap gap-2">{[[5, '5 mnt lalu'], [15, '15 mnt lalu'], [30, '30 mnt lalu'], [60, '1 jam lalu']]
+          .filter(([m]) => Date.now() - m * 60000 >= new Date(c.waktuMasuk).getTime()).map(([m, l]) => <Chip key={m} onClick={() => quick(m)}>{l}</Chip>)}</div>}
+        <Field label="Jam dibalas" required><input type="datetime-local" className={inputCls} value={v} min={masuk} max={toLocalInput()} onChange={(e) => setV(e.target.value)} /></Field>
+        {v && !errMsg && <div className="text-sm bg-cream rounded-xl p-3">FRT jadi <b>{fmtMin(frt)}</b> (target {c.targetFrtMin} mnt) — {frt <= c.targetFrtMin ? <span className="text-ok font-semibold">sesuai SLA</span> : <span className="text-brick font-semibold">lewat SLA</span>}</div>}
+        {v && errMsg && <div className="text-sm text-brick">{errMsg}</div>}
+        {needReason && <Field label="Alasan" required hint={edit ? 'Tercatat di riwayat case & audit log.' : 'Wajib karena lebih dari 60 menit yang lalu. Tercatat di audit log.'}>
+          <input className={inputCls} value={r} onChange={(e) => setR(e.target.value)} placeholder={edit ? 'Mis. salah pilih jam' : 'Mis. balas dari HP, baru sempat input'} />
+        </Field>}
+        <Btn className="w-full" size="lg" disabled={!!errMsg || (needReason && !r.trim())} onClick={() => onDone({ at: fromLocalInput(v), reason: r.trim() || null })}>Simpan</Btn>
+      </div>
+    </Sheet>
+  )
+}
+
 function TimeSheet({ open, onClose, c, onDone }) {
   const [f, setF] = useState('waktuFirstResponse')
   const [v, setV] = useState('')
@@ -277,16 +324,18 @@ function TimeSheet({ open, onClose, c, onDone }) {
 
 function EditSheet({ open, onClose, c, masters, onDone, limited }) {
   const [b, setB] = useState({})
-  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '' }) }, [open, c])
+  const fz = c.outletType === 'online_frozen'
+  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
   const subs = (masters?.subJenis || []).map((s) => ({ value: s.name, label: s.name, sub: s.contoh, keywords: s.keywords, level: s.level }))
   const outlets = (masters?.outlets || []).map((o) => ({ value: o.id, label: o.name, sub: o.area }))
   const set = (k) => (e) => setB({ ...b, [k]: e.target ? e.target.value : e })
   const submit = () => {
-    const keys = limited ? ['rootCause', 'costCenterFinal'] : Object.keys(b)
-    onDone(Object.fromEntries(keys.filter((k) => b[k] !== (c[k] ?? '')).map((k) => [k, b[k]])))
+    const keys = limited ? ['rootCause', 'costCenterFinal', ...(fz ? ['kodeProduksi'] : [])] : Object.keys(b)
+    const num = (k, v) => (['qtyPesan', 'qtyDiterima'].includes(k) ? (v === '' ? null : Number(v)) : v)
+    onDone(Object.fromEntries(keys.filter((k) => String(b[k] ?? '') !== String(c[k] ?? '')).map((k) => [k, num(k, b[k])]).filter(([, v]) => v !== null)))
   }
   return (
-    <Sheet open={open} onClose={onClose} title={limited ? 'Root cause & cost center' : 'Ubah data case'} wide>
+    <Sheet open={open} onClose={onClose} title={limited ? (fz ? 'Root cause, cost center & kode produksi' : 'Root cause & cost center') : 'Ubah data case'} wide>
       <div className="grid gap-3 sm:grid-cols-2">
         {!limited && <>
           <div className="sm:col-span-2"><Field label="Ringkasan"><textarea className={inputCls + ' py-2 min-h-[80px]'} value={b.ringkasan || ''} onChange={set('ringkasan')} /></Field></div>
@@ -300,6 +349,16 @@ function EditSheet({ open, onClose, c, masters, onDone, limited }) {
           <Field label="Nama customer"><input className={inputCls} value={b.customerName || ''} onChange={set('customerName')} /></Field>
           <Field label="No. HP customer"><input className={inputCls} value={b.customerPhone || ''} onChange={set('customerPhone')} /></Field>
         </>}
+        {fz && !limited && <>
+          <Field label="Produk"><input className={inputCls} list="frozen-products-edit" value={b.produk || ''} onChange={set('produk')} /><datalist id="frozen-products-edit">{(masters?.frozenProducts || []).map((p) => <option key={p} value={p} />)}</datalist></Field>
+          <Field label="Ekspedisi"><select className={inputCls} value={b.ekspedisi || ''} onChange={set('ekspedisi')}><option value="">–</option>{(masters?.couriers || []).map((x) => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="No. resi"><input className={inputCls} value={b.noResi || ''} onChange={set('noResi')} /></Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Qty dipesan"><input className={inputCls} inputMode="numeric" value={b.qtyPesan ?? ''} onChange={(e) => setB({ ...b, qtyPesan: e.target.value.replace(/\D/g, '') })} /></Field>
+            <Field label="Qty diterima"><input className={inputCls} inputMode="numeric" value={b.qtyDiterima ?? ''} onChange={(e) => setB({ ...b, qtyDiterima: e.target.value.replace(/\D/g, '') })} /></Field>
+          </div>
+        </>}
+        {fz && <Field label="Kode produksi" hint="Tercetak di kemasan. Dipakai menelusuri batch bermasalah."><input className={inputCls} value={b.kodeProduksi || ''} onChange={(e) => setB({ ...b, kodeProduksi: e.target.value.toUpperCase() })} /></Field>}
         <Field label="Root cause"><input className={inputCls} value={b.rootCause || ''} onChange={set('rootCause')} /></Field>
         <Field label="Cost center final"><select className={inputCls} value={b.costCenterFinal || ''} onChange={set('costCenterFinal')}><option value="">–</option><option>Factory</option><option>Operasional</option><option>Team Frozen</option></select></Field>
       </div>

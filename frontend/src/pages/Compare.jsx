@@ -55,15 +55,15 @@ function meets(m, v, targets) {
 
 /** meeting: { end, snapshot } — dipakai di Mode Meeting: tanggal akhir = akhir periode meeting,
  *  dan bila meeting terkunci, angka diambil dari snapshot (tidak berubah lagi). */
-export default function Compare({ brand, area, meeting }) {
+export default function Compare({ brand, area, line, meeting }) {
   const [mode, setMode] = useState('week')
   const [n, setN] = useState(meeting ? 6 : 8)
   const [end, setEnd] = useState(meeting?.end || todayWIB())
   const [sel, setSel] = useState('komplain')
   const snap = meeting?.snapshot?.[mode]
   const { data, loading, error } = useAsync(
-    () => snap ? Promise.resolve(snap) : api('/dashboard/compare', { params: { mode, n, end, brand, area } }),
-    [mode, n, end, brand, area, !!snap])
+    () => snap ? Promise.resolve(snap) : api('/dashboard/compare', { params: { mode, n, end, brand, area, line } }),
+    [mode, n, end, brand, area, line, !!snap])
   const m = METRICS.find((x) => x.key === sel)
   const chart = useMemo(() => (data?.periods || []).map((p) => ({ name: p.label, v: val(p, m), partial: p.partial })), [data, m])
   const target = data?.targets?.[sel]?.target

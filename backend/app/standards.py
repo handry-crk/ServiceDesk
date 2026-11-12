@@ -37,6 +37,40 @@ STANDARD_DOC = {"code": "CRM.STD.001", "title": "Standar Penanganan Komplain dan
                 "effective": "2026-10-20", "reference": "CRK.QA.P.003 Keluhan Pelanggan; CRK.MMS.003 Manual Sistem Jaminan Produk Halal",
                 "considerations": ["Tingkat keluhan/komplain", "Dampak yang dialami pelanggan", "Jumlah produk yang terdampak", "Jarak customer"]}
 
+# Frozen food (Online Frozen Shopee / TikTok)
+COURIERS = ["J&T Express", "SPX Standard", "SPX Instan", "Gojek / GoSend Instan", "Grab Instan", "JNE", "SiCepat",
+            "AnterAja", "POS Indonesia", "Kurir toko", "Lainnya"]
+FROZEN_PRODUCTS = [
+    "Paket Jajan Hemat Nikmat 3 Cimol AA isi Mozzarella", "Paket Jajan Hemat Nikmat 3 Cimol AA isi Ayam",
+    "Paket AA Mukbang 5 Cimol Isi Mozzarella Daun Jeruk", "Mix 3 pcs Mozza", "Mix 5 pcs Mozza",
+    "Mozza AP", "Mozza AB", "Mozza BQ", "Mozza BDO", "Mozza JB", "Ayam AP", "Ayam BQ", "Ayam JB",
+    "Cimol Bojot AA Mozzarella Frozen Food",
+]
+# sub jenis yang perlu kode produksi untuk telusur batch (produk / isi paket)
+NEEDS_BATCH = {"Cacat Produksi", "Penurunan Mutu (masih dapat dikonsumsi)", "Penurunan Mutu (tidak dapat dikonsumsi)",
+               "Kontaminasi", "Undercooked", "Overcooked", "Keracunan", "Missing Item", "Wrong Item", "Kesalahan Kemasan"}
+
+
+def normalize_courier(text):
+    t = (text or "").lower()
+    if not t:
+        return None
+    if "j&t" in t or "jnt" in t or "j & t" in t:
+        return "J&T Express"
+    if "spx" in t:
+        return "SPX Instan" if "instan" in t else "SPX Standard"
+    if "gojek" in t or "gosend" in t or "goto" in t:
+        return "Gojek / GoSend Instan"
+    if "grab" in t:
+        return "Grab Instan"
+    if t.strip() in ("pos", "pos indonesia") or "pos indo" in t:
+        return "POS Indonesia"
+    for c in ("JNE", "SiCepat", "AnterAja"):
+        if c.lower() in t:
+            return c
+    return "Lainnya"
+
+
 REVIEW_PLATFORMS = ["GoFood", "GrabFood", "ShopeeFood"]
 
 TIPE = ["Komplain", "Inquiry", "Advice and Suggestion"]

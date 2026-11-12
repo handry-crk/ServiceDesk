@@ -1,5 +1,6 @@
 """Impor sekali jalan dari XLSX 'Service Excellence Reporting CRK Okt 2026' (File → Download → .xlsx)."""
 import hashlib
+import re
 import io
 from datetime import timedelta, datetime
 
@@ -94,6 +95,35 @@ def _komp(bentuk, level, ctx):
     return {"kompensasiJenis": bentuk, "kompensasiLabel": bentuk, "kompensasiForceOutside": bool(level)}
 
 
+_RE_ORDER = re.compile(r"No\.?\s*pesanan\s*:?\s*([A-Za-z0-9-]+)", re.I)
+_RE_PRODUK = re.compile(r"produk\s*:?\s*([^;]+)", re.I)
+_RE_KODE = re.compile(r"kode\s*produksi\s*:?\s*([^;]+)", re.I)
+
+
+def parse_frozen_notes(notes):
+    """Catatan sheet lama: 'Rekap Frozen #1; Tiktok 2 / JNT; No. pesanan 5862…; produk Mozza AP; kode produksi kosong'."""
+    out = {}
+    if not notes:
+        return out
+    parts = [p.strip() for p in notes.split(";")]
+    for p in parts:
+        if "/" in p and not p.lower().startswith(("no.", "produk", "kode", "rekap")):
+            out["ekspedisi"] = S.normalize_courier(p.split("/", 1)[1])
+            break
+    m = _RE_ORDER.search(notes)
+    if m:
+        out["orderNoFromNotes"] = m.group(1)
+    m = _RE_PRODUK.search(notes)
+    if m:
+        out["produk"] = " ".join(m.group(1).split())
+    m = _RE_KODE.search(notes)
+    if m:
+        k = m.group(1).strip()
+        if k and not k.lower().startswith(("kosong", "koso", "-")):
+            out["kodeProduksi"] = k
+    return out
+
+
 async def import_workbook(data: bytes, dry_run=True, user=None):
     db = get_db()
     wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
@@ -157,6 +187,12 @@ async def import_workbook(data: bytes, dry_run=True, user=None):
             if level and sub and ctx["subJenis"][sub]["level"] != level:
                 c["levelChangeReason"] = None  # akan ditandai Cek Data
             c.update(_komp(_s(_get(r, 15)), level, ctx))
+            if outlet and outlet["type"] == "online_frozen":
+                fz = parse_frozen_notes(c.get("notes"))
+                on = fz.pop("orderNoFromNotes", None)
+                if on and not c.get("orderNo"):
+                    c["orderNo"] = on
+                c.update(fz)
             imported.append(c)
         # deteksi duplikat di antara data impor
         for i, a in enumerate(imported):

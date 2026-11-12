@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from .auth import current_user, require, LEAD, WRITERS, MEETING_EDITORS
 from .core import get_db, now, parse_iso, as_utc, clean, mask_phone, wib_date, Config
+from . import standards as S
 from .logic import load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights
 from .services import (next_case_id, save_case, add_event, audit, find_duplicates, get_case_or_404,
                        survey_token, issue_voucher, new_id)
@@ -37,7 +38,7 @@ def area_filter(u, q):
     return q
 
 
-async def cases_in_period(frm: str, to: str, u=None, brand=None, area=None, ctx=None):
+async def cases_in_period(frm: str, to: str, u=None, brand=None, area=None, ctx=None, line=None):
     """Kolom otomatis dihitung ulang saat dibaca, supaya Same-Day case yang masih open
     dan perubahan target/standard selalu ikut terbaru."""
     from .logic import compute_case
@@ -47,6 +48,10 @@ async def cases_in_period(frm: str, to: str, u=None, brand=None, area=None, ctx=
         q["brand"] = brand
     if area:
         q["area"] = area
+    if line == "frozen":
+        q["outletType"] = "online_frozen"
+    elif line == "outlet":
+        q["outletType"] = {"$ne": "online_frozen"}
     if u:
         area_filter(u, q)
     return [compute_case(c, ctx) async for c in get_db().cases.find(q)]
@@ -66,6 +71,12 @@ class CaseIn(BaseModel):
     customerName: Optional[str] = None
     customerPhone: Optional[str] = None
     photos: list[str] = []
+    produk: Optional[str] = None
+    kodeProduksi: Optional[str] = None
+    ekspedisi: Optional[str] = None
+    noResi: Optional[str] = None
+    qtyPesan: Optional[int] = None
+    qtyDiterima: Optional[int] = None
     source: Optional[str] = "manual"
     sourceRefId: Optional[str] = None
     force: bool = False
@@ -108,6 +119,10 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
         "status": "Open", "reopenCount": 0, "csAgent": u["name"], "csAgentId": u["id"],
         "source": body.source or "manual", "sourceRefId": body.sourceRefId,
         "possibleDuplicateOf": dups[0] if dups else None,
+        **{k: (v.strip() if isinstance(v, str) else v) for k, v in
+           (("produk", body.produk), ("kodeProduksi", body.kodeProduksi), ("ekspedisi", body.ekspedisi),
+            ("noResi", body.noResi), ("qtyPesan", body.qtyPesan), ("qtyDiterima", body.qtyDiterima))
+           if v not in (None, "")},
         "createdBy": u["name"], "createdAt": now(), "surveyToken": survey_token(),
     }
     sj = ctx["subJenis"][body.subJenis]
@@ -180,6 +195,12 @@ class PatchIn(BaseModel):
     costCenterFinal: Optional[str] = None
     photos: Optional[list[str]] = None
     nilaiKompensasi: Optional[int] = None
+    produk: Optional[str] = None
+    kodeProduksi: Optional[str] = None
+    ekspedisi: Optional[str] = None
+    noResi: Optional[str] = None
+    qtyPesan: Optional[int] = None
+    qtyDiterima: Optional[int] = None
 
 
 @router.patch("/cases/{case_id}")
@@ -187,10 +208,10 @@ async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
     c = await get_case_or_404(case_id)
     check_area(u, c)
     data = body.model_dump(exclude_none=True)
-    limited = {"rootCause", "notes", "costCenterFinal"}
+    limited = {"rootCause", "notes", "costCenterFinal", "kodeProduksi"}
     if u["role"] in ("Manager Area", "Ops/QC"):
         if set(data) - limited:
-            raise HTTPException(403, "Peran Anda hanya bisa mengisi root cause, catatan, dan cost center final.")
+            raise HTTPException(403, "Peran Anda hanya bisa mengisi root cause, catatan, cost center final, dan kode produksi.")
     elif u["role"] == "Viewer":
         raise HTTPException(403, "Viewer hanya bisa melihat.")
     if "subJenis" in data and u["role"] not in LEAD and data["subJenis"] != c.get("subJenis"):
@@ -209,16 +230,43 @@ async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
     return out_case(c, u)
 
 
+def _check_fr_time(c, at):
+    if as_utc(at) > now() + timedelta(minutes=2):
+        raise HTTPException(400, "Waktu dibalas tidak boleh di masa depan.")
+    if as_utc(at) < as_utc(c["waktuMasuk"]):
+        raise HTTPException(400, "Waktu dibalas tidak boleh sebelum waktu masuk.")
+    if c.get("waktuResolved") and as_utc(at) > as_utc(c["waktuResolved"]):
+        raise HTTPException(400, "Waktu dibalas tidak boleh setelah waktu Resolved.")
+
+
+class RespondIn(BaseModel):
+    at: Optional[str] = None
+    reason: Optional[str] = None
+
+
 @router.post("/cases/{case_id}/respond")
-async def respond(case_id: str, u=Depends(require(*WRITERS))):
+async def respond(case_id: str, body: RespondIn | None = None, u=Depends(require(*WRITERS))):
+    """Tandai sudah dibalas. `at` = jam balasan sebenarnya bila dicatat belakangan
+    (lebih dari 60 menit ke belakang wajib alasan)."""
     c = await get_case_or_404(case_id)
     if c.get("waktuFirstResponse"):
-        raise HTTPException(400, "Case ini sudah ditandai dibalas.")
-    c["waktuFirstResponse"] = now()
+        raise HTTPException(400, "Case ini sudah ditandai dibalas. Pakai 'Ubah waktu dibalas' untuk mengoreksi.")
+    at = parse_iso(body.at) if body and body.at else now()
+    _check_fr_time(c, at)
+    back_min = (now() - as_utc(at)).total_seconds() / 60
+    reason = ((body.reason if body else None) or "").strip()
+    if back_min > 60 and not reason:
+        raise HTTPException(400, "Waktu dibalas lebih dari 60 menit yang lalu: tulis alasannya.")
+    c["waktuFirstResponse"] = at
+    if back_min > 2:
+        c["frtManual"] = True
     if c["status"] == "Open":
         c["status"] = "Responded"
     await save_case(c)
-    await add_event(case_id, "responded", u)
+    await add_event(case_id, "responded", u, {"backdatedMin": round(back_min) if back_min > 2 else 0,
+                                               "reason": reason or None})
+    if back_min > 2:
+        await audit(u, f"respond-backdated {case_id}", None, str(at), reason or f"dicatat {round(back_min)} menit setelah membalas")
     return out_case(c, u)
 
 
@@ -328,9 +376,11 @@ class CorrectIn(BaseModel):
 
 
 @router.post("/cases/{case_id}/correct-time")
-async def correct_time(case_id: str, body: CorrectIn, u=Depends(require(*LEAD))):
+async def correct_time(case_id: str, body: CorrectIn, u=Depends(require(*WRITERS))):
     if body.field not in ("waktuMasuk", "waktuFirstResponse", "waktuResolved", "waktuClosed"):
         raise HTTPException(400, "Kolom waktu tidak dikenal.")
+    if body.field != "waktuFirstResponse" and u["role"] not in LEAD:
+        raise HTTPException(403, "CS hanya bisa mengubah waktu dibalas. Waktu lain dikoreksi CRM Supervisor.")
     if not body.reason.strip():
         raise HTTPException(400, "Alasan koreksi wajib diisi.")
     c = await get_case_or_404(case_id)
@@ -347,6 +397,12 @@ async def correct_time(case_id: str, body: CorrectIn, u=Depends(require(*LEAD)))
             raise HTTPException(400, "Waktu tidak boleh lebih awal dari Waktu Masuk.")
     if trial.get("waktuClosed") and (not trial.get("waktuResolved") or as_utc(trial["waktuClosed"]) < as_utc(trial["waktuResolved"])):
         raise HTTPException(400, "Waktu Closed tidak boleh sebelum Waktu Resolved.")
+    if body.field == "waktuFirstResponse":
+        if not val and u["role"] not in LEAD:
+            raise HTTPException(400, "Isi jam dibalas yang benar.")
+        if val and trial.get("waktuResolved") and as_utc(val) > as_utc(trial["waktuResolved"]):
+            raise HTTPException(400, "Waktu dibalas tidak boleh setelah waktu Resolved.")
+        c["frtManual"] = bool(val)
     before = c.get(body.field)
     c[body.field] = val
     if body.field == "waktuMasuk":
@@ -456,19 +512,19 @@ async def total_trx(frm: date, to: date):
     return round(total) if have else None
 
 
-async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None):
+async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None, line=None):
     ctx = await load_ctx()
     targets = ctx["targets"]
-    cases = await cases_in_period(frm, to, u, brand, area, ctx)
+    cases = await cases_in_period(frm, to, u, brand, area, ctx, line)
     f, t = date.fromisoformat(frm), date.fromisoformat(to)
     trx = await total_trx(f, t)
     m, vol, table = compute_metrics(cases, targets, trx)
-    scope = outlet_scope(ctx, u, brand, area)
+    scope = [] if line == "frozen" else outlet_scope(ctx, u, brand, area)
     co = await csat_summary(frm, to, scope)
     m["csatOutlet"], m["csatOutletN"] = co["puas"], co["rated"]
     span = (t - f).days + 1
     pf, pt = f - timedelta(days=span), f - timedelta(days=1)
-    prev_cases = await cases_in_period(pf.isoformat(), pt.isoformat(), u, brand, area, ctx)
+    prev_cases = await cases_in_period(pf.isoformat(), pt.isoformat(), u, brand, area, ctx, line)
     pm, pvol, _ = compute_metrics(prev_cases, targets)
     pco = await csat_summary(pf.isoformat(), pt.isoformat(), scope)
     pm["csatOutlet"], pm["csatOutletN"] = pco["puas"], pco["rated"]
@@ -507,8 +563,68 @@ async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None):
 
 @router.get("/dashboard")
 async def dashboard(u=Depends(current_user), frm: str = Query(..., alias="from"), to: str = Query(...),
-                    brand: Optional[str] = None, area: Optional[str] = None):
-    return await build_dashboard(frm, to, u, brand, area)
+                    brand: Optional[str] = None, area: Optional[str] = None, line: Optional[str] = None):
+    return await build_dashboard(frm, to, u, brand, area, line)
+
+
+@router.get("/dashboard/frozen")
+async def dashboard_frozen(u=Depends(current_user), frm: str = Query(..., alias="from"), to: str = Query(...)):
+    """Komplain frozen food (toko Online Frozen di Shopee / TikTok)."""
+    from collections import Counter, defaultdict
+    ctx = await load_ctx()
+    cases = await cases_in_period(frm, to, u, None, None, ctx, "frozen")
+    f, t = date.fromisoformat(frm), date.fromisoformat(to)
+    span = (t - f).days + 1
+    pf, pt = f - timedelta(days=span), f - timedelta(days=1)
+    prev = await cases_in_period(pf.isoformat(), pt.isoformat(), u, None, None, ctx, "frozen")
+    targets = ctx["targets"]
+    m, vol, table = compute_metrics(cases, targets)
+    pm, pvol, _ = compute_metrics(prev, targets)
+    komplain = [c for c in cases if c.get("tipe", "Komplain") == "Komplain"]
+    need = [c for c in komplain if c.get("subJenis") in S.NEEDS_BATCH]
+    with_batch = [c for c in need if c.get("kodeProduksi")]
+    batches = defaultdict(list)
+    for c in komplain:
+        if c.get("kodeProduksi"):
+            batches[c["kodeProduksi"].strip().upper()].append(c)
+    repeat = sorted(([{"kode": k, "count": len(v), "cases": [x["caseId"] for x in v],
+                       "subJenis": Counter(x.get("subJenis") for x in v).most_common(1)[0][0],
+                       "produk": Counter(x.get("produk") for x in v if x.get("produk")).most_common(1)[0][0]
+                       if any(x.get("produk") for x in v) else None}
+                      for k, v in batches.items() if len(v) >= 2]), key=lambda r: -r["count"])
+    short = [c for c in komplain if isinstance(c.get("qtyPesan"), int) and isinstance(c.get("qtyDiterima"), int)]
+    pcs_kurang = sum(max(0, c["qtyPesan"] - c["qtyDiterima"]) for c in short)
+    for c in komplain:
+        c["_produk"] = c.get("produk") or "Belum diisi"
+        c["_ekspedisi"] = c.get("ekspedisi") or "Belum diisi"
+        c["_rc"] = c.get("rootCause") or "Belum diisi"
+        c["_cc"] = c.get("costCenterFinal") or c.get("costCenter") or "-"
+    open_rows = sorted([out_case(c, u) for c in komplain if c.get("status") not in ("Resolved", "Closed")],
+                       key=lambda c: c.get("waktuMasuk") or "")
+    sub = breakdown(komplain, "subJenis")
+    stores = breakdown(komplain, "outletName")
+    couriers = breakdown(komplain, "_ekspedisi")
+    ins = {}
+    if komplain:
+        top = sub[0]
+        ins["sub"] = f"{top['name']} menyumbang {top['count']} dari {len(komplain)} komplain frozen ({round(top['pct'] * 100)}%)."
+        known = [r for r in couriers if r["name"] != "Belum diisi"]
+        if known:
+            ins["courier"] = f"Ekspedisi terbanyak dikomplain: {known[0]['name']} ({known[0]['count']} case)."
+        if need:
+            ins["batch"] = (f"Kode produksi terisi di {len(with_batch)} dari {len(need)} komplain produk "
+                            f"({round(len(with_batch) / len(need) * 100)}%). Tanpa kode produksi, batch bermasalah tidak bisa ditelusuri.")
+    return {
+        "period": {"from": frm, "to": to, "prevFrom": pf.isoformat(), "prevTo": pt.isoformat()},
+        "metrics": m, "prev": pm, "volume": vol, "prevVolume": pvol, "table": table, "targets": targets,
+        "stores": stores, "subJenis": sub, "couriers": couriers, "products": breakdown(komplain, "_produk")[:10],
+        "rootCauses": breakdown(komplain, "_rc")[:10], "picDept": breakdown(komplain, "picDept"),
+        "costCenters": breakdown(komplain, "_cc"), "levels": breakdown(komplain, "level"),
+        "batch": {"needed": len(need), "filled": len(with_batch),
+                  "rate": round(len(with_batch) / len(need), 4) if need else None, "repeat": repeat},
+        "qty": {"cases": len(short), "pcsKurang": pcs_kurang},
+        "weeks": weekly(cases, f, t, targets), "open": open_rows, "insights": ins,
+    }
 
 
 BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
@@ -557,11 +673,11 @@ def compare_periods(mode: str, n: int, end: date):
 
 @router.get("/dashboard/compare")
 async def dashboard_compare(u=Depends(current_user), mode: str = "week", n: int = 8, end: Optional[str] = None,
-                            brand: Optional[str] = None, area: Optional[str] = None):
-    return await build_compare(mode, n, end, u, brand, area)
+                            brand: Optional[str] = None, area: Optional[str] = None, line: Optional[str] = None):
+    return await build_compare(mode, n, end, u, brand, area, line)
 
 
-async def build_compare(mode="week", n=8, end=None, u=None, brand=None, area=None):
+async def build_compare(mode="week", n=8, end=None, u=None, brand=None, area=None, line=None):
     if mode not in ("week", "month"):
         raise HTTPException(400, "mode harus week atau month.")
     n = max(2, min(n, 26 if mode == "week" else 24))
@@ -569,8 +685,8 @@ async def build_compare(mode="week", n=8, end=None, u=None, brand=None, area=Non
     periods = compare_periods(mode, n, end_d)
     ctx = await load_ctx()
     targets = ctx["targets"]
-    allc = await cases_in_period(periods[0]["from"].isoformat(), end_d.isoformat(), u, brand, area, ctx)
-    scope = outlet_scope(ctx, u, brand, area)
+    allc = await cases_in_period(periods[0]["from"].isoformat(), end_d.isoformat(), u, brand, area, ctx, line)
+    scope = [] if line == "frozen" else outlet_scope(ctx, u, brand, area)
     rows = []
     sub_counts = {}
     src_counts = {}

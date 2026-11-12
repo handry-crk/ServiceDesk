@@ -80,6 +80,16 @@ async def seed_if_empty():
     # migrasi: review hasil impor versi awal jangan membanjiri Inbox
     await db.reviews.update_many({"klasifikasiSumber": {"$ne": "Input manual"}, "triage": {"$exists": False}},
                                  {"$set": {"triage": "tidak_perlu"}})
+    # migrasi: case frozen hasil impor lama → ambil ekspedisi / produk / no. pesanan dari catatan
+    from .importer import parse_frozen_notes
+    async for c in db.cases.find({"outletType": "online_frozen", "source": "import", "frozenParsed": {"$exists": False}}):
+        fz = parse_frozen_notes(c.get("notes"))
+        on = fz.pop("orderNoFromNotes", None)
+        upd = {k: v for k, v in fz.items() if not c.get(k)}
+        if on and not c.get("orderNo"):
+            upd["orderNo"] = on
+        upd["frozenParsed"] = True
+        await db.cases.update_one({"_id": c["_id"]}, {"$set": upd})
     for coll, keys in (("cases", ["caseId", "tanggalMasuk", "status", "outletId", "subJenis", "surveyToken"]),
                        ("sessions", ["token"]), ("vouchers", ["kode", "status"]), ("csat", ["id", "timestamp"]),
                        ("reviews", ["id"]), ("events", ["caseId"]), ("users", ["email"]),

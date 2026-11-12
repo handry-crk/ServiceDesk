@@ -368,3 +368,78 @@ def test_csat_complaint_and_outlet(ctx):
     # viewer tidak boleh menandai survei terkirim
     V = login(c, "Lihat", "123123")
     assert c.post(f"/api/cases/{cid}/survey-sent", json={}, headers=V).status_code == 403
+
+
+def test_first_response_time_edit(ctx):
+    c, H, o = ctx
+    A = login(c, "Agen", "123123")
+    now_w = datetime.now(WIB).replace(second=0, microsecond=0)
+    masuk = now_w - timedelta(hours=3)
+    k = mk(c, A, o, subJenis="Speed of Service", waktuMasuk=masuk.isoformat()).json()
+    cid = k["caseId"]
+    # dibalas 2 jam lalu tanpa alasan → ditolak; sebelum masuk / masa depan → ditolak
+    at = (now_w - timedelta(hours=2)).isoformat()
+    assert c.post(f"/api/cases/{cid}/respond", json={"at": at}, headers=A).status_code == 400
+    assert c.post(f"/api/cases/{cid}/respond", json={"at": (masuk - timedelta(minutes=5)).isoformat(), "reason": "x"}, headers=A).status_code == 400
+    assert c.post(f"/api/cases/{cid}/respond", json={"at": (now_w + timedelta(hours=1)).isoformat(), "reason": "x"}, headers=A).status_code == 400
+    r = c.post(f"/api/cases/{cid}/respond", json={"at": at, "reason": "lupa klik, balas via WA"}, headers=A).json()
+    assert r["status"] == "Responded" and r["frtMin"] == 60 and r["frtManual"] is True
+    # sudah dibalas → respond lagi ditolak; CS boleh ubah waktu dibalas lewat correct-time
+    assert c.post(f"/api/cases/{cid}/respond", json={}, headers=A).status_code == 400
+    r = c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuFirstResponse", "value": (masuk + timedelta(minutes=10)).isoformat(), "reason": "salah jam"}, headers=A).json()
+    assert r["frtMin"] == 10
+    # CS tidak boleh mengosongkan atau mengubah waktu lain
+    assert c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuFirstResponse", "value": None, "reason": "x"}, headers=A).status_code == 400
+    assert c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuMasuk", "value": masuk.isoformat(), "reason": "x"}, headers=A).status_code == 403
+    # respond tanpa body = sekarang, tidak manual
+    k2 = mk(c, A, o, subJenis="Hospitality", ringkasan="uji fr 2").json()
+    r = c.post(f"/api/cases/{k2['caseId']}/respond", headers=A).json()
+    assert r["status"] == "Responded" and not r.get("frtManual")
+    # Viewer tidak boleh
+    V = login(c, "Lihat", "123123")
+    k3 = mk(c, A, o, subJenis="Hospitality", ringkasan="uji fr 3").json()
+    assert c.post(f"/api/cases/{k3['caseId']}/respond", headers=V).status_code == 403
+
+
+def test_frozen_fields_and_dashboard(ctx):
+    c, H, o = ctx
+    tk, sp = o["Online Frozen (Tiktok 2)"], o["Online Frozen (Shopee)"]
+    m = c.get("/api/masters", headers=H).json()
+    assert "J&T Express" in m["couriers"] and "Mozza AP" in m["frozenProducts"]
+    day = wib_iso(2026, 10, 14, 10, 0)
+    a = mk(c, H, o, outletId=tk, channel="WhatsApp", subJenis="Cacat Produksi", ringkasan="cimol pecah", waktuMasuk=day,
+           produk="Mozza AP", ekspedisi="J&T Express", noResi="JX123", kodeProduksi="B2410", qtyPesan=10, qtyDiterima=8).json()
+    assert a["caseId"].startswith("FRZ") and a["produk"] == "Mozza AP" and a["kodeProduksi"] == "B2410"
+    assert "Kode produksi belum diisi" not in (a.get("dataIssues") or [])
+    b = mk(c, H, o, outletId=sp, channel="WhatsApp", subJenis="Cacat Produksi", ringkasan="cimol pecah 2", waktuMasuk=wib_iso(2026, 10, 15, 10, 0),
+           produk="Mozza AP", ekspedisi="J&T Express", kodeProduksi="b2410").json()
+    d = mk(c, H, o, outletId=sp, channel="WhatsApp", subJenis="Missing Item", ringkasan="kurang 1", waktuMasuk=wib_iso(2026, 10, 16, 10, 0),
+           ekspedisi="SPX Standard").json()
+    assert "Kode produksi belum diisi" in d["dataIssues"]
+    # QC/Ops boleh isi kode produksi
+    Q = login(c, "QC", "123123")
+    r = c.patch(f"/api/cases/{d['caseId']}", json={"kodeProduksi": "C0110"}, headers=Q)
+    assert r.status_code == 200 and "Kode produksi belum diisi" not in r.json()["dataIssues"]
+    mk(c, H, o, subJenis="Hospitality", ringkasan="outlet biasa", waktuMasuk=day)
+    f = c.get("/api/dashboard/frozen", params={"from": "2026-10-01", "to": "2026-10-31"}, headers=H).json()
+    assert f["volume"]["komplain"] == 3
+    assert sum(s["count"] for s in f["stores"]) == 3
+    assert {x["name"]: x["count"] for x in f["couriers"]}["J&T Express"] == 2
+    assert f["batch"]["needed"] == 3 and f["batch"]["filled"] == 3 and f["batch"]["rate"] == 1
+    assert f["batch"]["repeat"][0]["kode"] == "B2410" and f["batch"]["repeat"][0]["count"] == 2
+    assert f["qty"]["pcsKurang"] == 2
+    # filter line di dashboard & komparasi
+    fz = c.get("/api/dashboard", params={"from": "2026-10-01", "to": "2026-10-31", "line": "frozen"}, headers=H).json()
+    ol = c.get("/api/dashboard", params={"from": "2026-10-01", "to": "2026-10-31", "line": "outlet"}, headers=H).json()
+    al = c.get("/api/dashboard", params={"from": "2026-10-01", "to": "2026-10-31"}, headers=H).json()
+    assert fz["volume"]["komplain"] + ol["volume"]["komplain"] == al["volume"]["komplain"] and fz["volume"]["komplain"] == 3
+    cp = c.get("/api/dashboard/compare", params={"mode": "month", "n": 2, "end": "2026-10-31", "line": "frozen"}, headers=H).json()
+    assert cp["periods"][-1]["volume"]["komplain"] == 3
+
+
+def test_parse_frozen_notes():
+    from app.importer import parse_frozen_notes as p
+    r = p("Rekap Frozen #1; Tiktok 2 / JNT; No. pesanan 586279494678512944; produk Mozza AP; kode produksi kosong")
+    assert r == {"ekspedisi": "J&T Express", "orderNoFromNotes": "586279494678512944", "produk": "Mozza AP"}
+    assert p("Rekap Frozen #3; Shopee / SPX Instan; produk Mix 3 pcs Mozza; kode produksi A0901")["kodeProduksi"] == "A0901"
+    assert p(None) == {}

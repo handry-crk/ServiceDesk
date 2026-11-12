@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, date
 from statistics import mean
 
 from .core import as_utc, wib, wib_date, now, WIB, get_db
+from .standards import NEEDS_BATCH
 
 # CRM.STD.001 5.1: benda asing, potensi keracunan, tidak matang → Factory/Operasional sesuai root cause
 CRITICAL_COST_RC = {"Kontaminasi", "Keracunan", "Undercooked"}
@@ -173,6 +174,9 @@ def data_issues(c, pj_auto):
         iss.append("Closed tanpa Follow-up Y/N")
     if needs_cost_final(c) and c.get("waktuClosed") and not c.get("costCenterFinal") and c.get("source") != "import":
         iss.append("Critical tanpa cost center final")
+    if c.get("outletType") == "online_frozen" and c.get("subJenis") in NEEDS_BATCH and not c.get("kodeProduksi") \
+            and c.get("source") != "import":
+        iss.append("Kode produksi belum diisi")
     if c.get("possibleDuplicateOf"):
         iss.append("Mungkin duplikat " + c["possibleDuplicateOf"])
     if c.get("kompensasiOutsideStandard"):

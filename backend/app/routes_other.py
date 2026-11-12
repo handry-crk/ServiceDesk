@@ -60,7 +60,7 @@ async def masters(u=Depends(current_user)):
         "targets": ctx["targets"], "settings": ctx["settings"], "penanggungJawab": ctx["pj"],
         "resolutionTarget": ctx["resTarget"], "criticalFrt": ctx["criticalFrt"],
         "outlets": sorted([clean(x) for x in ctx["outlets"].values()], key=lambda x: x["name"]),
-        "picDept": S.PIC_DEPT, "tipe": S.TIPE, "reviewPlatforms": S.REVIEW_PLATFORMS, "standardDoc": S.STANDARD_DOC, "areas": S.AREAS, "voucherJenis": S.VOUCHER_JENIS,
+        "picDept": S.PIC_DEPT, "tipe": S.TIPE, "reviewPlatforms": S.REVIEW_PLATFORMS, "couriers": S.COURIERS, "frozenProducts": S.FROZEN_PRODUCTS, "needsBatch": sorted(S.NEEDS_BATCH), "standardDoc": S.STANDARD_DOC, "areas": S.AREAS, "voucherJenis": S.VOUCHER_JENIS,
         "brands": sorted({o.get("brand") or "Cimol Bojot AA" for o in ctx["outlets"].values()}),
         "agents": sorted({u2["name"] async for u2 in db.users.find({"active": True})}),
     }
@@ -583,7 +583,8 @@ EXPORT_COLS = [
     ("Resolution SLA OK", "resolutionSlaOk"), ("Same Day", "sameDay"), ("FCR", "fcr"), ("Puas (CSAT ≥4)", "puas"),
     ("Jenis Komplain", "jenis"), ("Level Standard", "levelStandard"), ("Cost Center", "costCenter"),
     ("Cost Center Final", "costCenterFinal"), ("Kompensasi di luar standard", "kompensasiOutsideStandard"),
-    ("Kode Voucher", "voucherCode"), ("No. Pesanan", "orderNo"), ("Area", "area"), ("Cek Data", "dataIssues"),
+    ("Kode Voucher", "voucherCode"), ("No. Pesanan", "orderNo"), ("Produk", "produk"), ("Kode Produksi", "kodeProduksi"),
+    ("Ekspedisi", "ekspedisi"), ("No. Resi", "noResi"), ("Qty Dipesan", "qtyPesan"), ("Qty Diterima", "qtyDiterima"), ("Area", "area"), ("Cek Data", "dataIssues"),
 ]
 
 

@@ -61,7 +61,10 @@ export default function Inbox() {
       <Section title="Belum dibalas" count={data.open.length} tone={data.open.length ? 'bg-brick text-white' : ''}>
         {data.open.length === 0 && <Empty>Semua chat sudah dibalas. 👍</Empty>}
         {data.open.map((c) => <CaseCard key={c.caseId} c={c} now={now}
-          action={writer && <Btn kind="ok" className="w-full" onClick={() => respond(c)}>Sudah dibalas</Btn>} />)}
+          action={writer && <div className="flex gap-2">
+            <Btn kind="ok" className="flex-1" onClick={() => respond(c)}>Sudah dibalas</Btn>
+            <Btn kind="ghost" title="Sudah dibalas lebih awal, isi jam balasan sebenarnya" onClick={() => nav(`/case/${c.caseId}?aksi=respond`)}>Jam lain…</Btn>
+          </div>} />)}
       </Section>
 
       <Section title="Menunggu penyelesaian" count={data.responded.length}>

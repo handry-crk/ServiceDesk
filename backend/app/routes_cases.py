@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from .auth import current_user, require, LEAD, WRITERS, MEETING_EDITORS
 from .core import get_db, now, parse_iso, as_utc, clean, mask_phone, wib_date, Config
 from . import standards as S
-from .logic import compute_case, load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights
+from .logic import compute_case, load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights, by_member, level_breakdown
 from .services import (next_case_id, save_case, add_event, audit, find_duplicates, get_case_or_404,
                        survey_token, issue_voucher, new_id)
 
@@ -689,6 +689,7 @@ async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None, line
         "metrics": m, "prev": pm, "volume": vol, "prevVolume": pvol, "table": table, "targets": targets,
         "levels": levels, "jenis": jenis, "subJenis": subj, "channels": channels, "sourceGroups": sourceGroups, "picDept": pic,
         "outlets": outlets, "kompensasi": komp, "hours": hours, "weeks": weeks,
+        "members": by_member(cases, targets), "levelDetail": level_breakdown(komplain, f, t),
         "insights": insights(cases, m, vol, hours, subj, channels),
     }
 
@@ -906,6 +907,9 @@ async def get_meeting(mid: str, u=Depends(current_user)):
     if "integrity" not in dash:
         from .routes_integrity import build_integrity
         dash["integrity"] = await build_integrity(m["periodStart"], m["periodEnd"])
+    if "komp" not in dash:
+        from .routes_komp import build_komp
+        dash["komp"] = await build_komp(m["periodStart"], m["periodEnd"])
     prev = await db.meetings.find_one({"date": {"$lt": m["date"]}, "locked": True}, sort=[("date", -1)])
     open_actions = [clean(a) async for a in db.voc_actions.find({"status": {"$in": ["Open", "On Progress"]}}).sort("deadline", 1)]
     reviews = await review_summary(m["periodStart"], m["periodEnd"])
@@ -963,6 +967,8 @@ async def lock(mid: str, u=Depends(require(*LEAD))):
                        "month": await build_compare("month", 6, m["periodEnd"])}
     from .routes_integrity import build_integrity
     dash["integrity"] = await build_integrity(m["periodStart"], m["periodEnd"])
+    from .routes_komp import build_komp
+    dash["komp"] = await build_komp(m["periodStart"], m["periodEnd"])
     await db.meetings.update_one({"id": mid}, {"$set": {"locked": True, "snapshot": dash, "lockedAt": now(),
                                                         "lockedBy": u["name"]}})
     return {"ok": True}

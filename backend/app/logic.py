@@ -325,6 +325,79 @@ def weekly(cases, start: date, end: date, targets):
     return out
 
 
+def by_member(cases, targets):
+    """First response per member (yang menekan Sudah dibalas; data lama: CS agent di sheet)."""
+    from statistics import median
+    groups = defaultdict(list)
+    for c in cases:
+        if c.get("frtMin") is not None:
+            groups[c.get("frBy") or c.get("csAgent") or "Data lama (tanpa nama CS)"].append(c)
+    tgt = (targets.get("frt") or {}).get("target")
+    rows = []
+    for name, cs in groups.items():
+        sla = [c for c in cs if c.get("slaResponseOk") is not None]
+        frts = [c["frtMin"] for c in cs]
+        rows.append({
+            "name": name, "count": len(cs), "avgFrt": _avg(frts), "medianFrt": round(median(frts), 1),
+            "avgFrtWork": _avg([c.get("frtWorkMin") for c in cs]),
+            "slaResponse": _rate(sum(1 for c in sla if c["slaResponseOk"]), len(sla)),
+            "late": sum(1 for c in sla if not c["slaResponseOk"]),
+            "critical": sum(1 for c in cs if c.get("level") == "Critical"),
+            "criticalLate": sum(1 for c in cs if c.get("level") == "Critical" and c.get("slaResponseOk") is False),
+            "frtSystem": _avg([c.get("frtSystemMin") for c in cs]),
+            "manualPct": _rate(sum(1 for c in cs if c.get("frtManual")), sum(1 for c in cs if c.get("frRecordedAt"))),
+            "onTarget": (_avg(frts) <= tgt) if (tgt is not None and frts) else None,
+        })
+    rows.sort(key=lambda r: -r["count"])
+    return rows
+
+
+LEVELS = ("Critical", "Major", "Minor")
+
+
+def level_breakdown(komplain, start: date, end: date):
+    """Per level: komposisi sub jenis + tren mingguan per level."""
+    out = []
+    total = len(komplain) or 1
+    for lv in LEVELS + ("Belum Terklasifikasi",):
+        cs = [c for c in komplain if (c.get("level") or "Belum Terklasifikasi") == lv]
+        if not cs:
+            continue
+        sub = defaultdict(list)
+        for c in cs:
+            sub[c.get("subJenis") or "Belum diisi"].append(c)
+        subs = sorted(({"name": n, "count": len(x), "pct": round(len(x) / len(cs), 4),
+                        "open": sum(1 for c in x if c.get("status") not in ("Resolved", "Closed")),
+                        "outlets": sorted({c.get("outletName") for c in x if c.get("outletName")})[:5]}
+                       for n, x in sub.items()), key=lambda r: -r["count"])
+        sd = [c for c in cs if c.get("sameDay") is not None]
+        out.append({"level": lv, "count": len(cs), "pct": round(len(cs) / total, 4),
+                    "open": sum(1 for c in cs if c.get("status") not in ("Resolved", "Closed")),
+                    "sameDay": _rate(sum(1 for c in sd if c["sameDay"]), len(sd)),
+                    "biaya": sum(c.get("nilaiKompensasi") or 0 for c in cs),
+                    "subJenis": subs,
+                    "summary": f"{lv} {len(cs)} case: " + ", ".join(f"{r['name']} {r['count']}" for r in subs[:6]) +
+                               (f", lainnya {sum(r['count'] for r in subs[6:])}" if len(subs) > 6 else "") + "."})
+    weeks = []
+    s, i = start, 0
+    while s <= end and i < 12:
+        e = min(s + timedelta(days=6), end)
+        cs = [c for c in komplain if c.get("tanggalMasuk") and s.isoformat() <= c["tanggalMasuk"] <= e.isoformat()]
+        row = {"week": f"W{i + 1}", "start": s.isoformat(), "end": e.isoformat()}
+        for lv in LEVELS:
+            row[lv] = sum(1 for c in cs if c.get("level") == lv)
+        row["Belum"] = sum(1 for c in cs if not c.get("level"))
+        crit = defaultdict(int)
+        for c in cs:
+            if c.get("level") == "Critical":
+                crit[c.get("subJenis") or "Belum diisi"] += 1
+        row["criticalDetail"] = dict(sorted(crit.items(), key=lambda x: -x[1]))
+        weeks.append(row)
+        s = e + timedelta(days=1)
+        i += 1
+    return {"levels": out, "weeks": weeks}
+
+
 def by_hour(cases):
     rows = []
     for h in range(24):

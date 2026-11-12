@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, useApp, useAsync, fmtD, fmtPct, fmtNum, fmtRp, todayWIB, WRITERS, LEAD, MEETING_EDITORS } from '../lib.jsx'
 import { Btn, ErrorBox, Skeleton, LevelBadge, inputCls } from '../ui.jsx'
-import { Headline, MetricsTable, LevelTable, HBar, HourChart, Weekly } from './Dashboard.jsx'
+import { Headline, MetricsTable, LevelTable, HBar, HourChart, Weekly, MemberTable, LevelBreakdown } from './Dashboard.jsx'
+import { KompSummary, GroupTable } from './Kompensasi.jsx'
 import Compare from './Compare.jsx'
 import { IntegrityBody } from './Integritas.jsx'
 
@@ -91,7 +92,7 @@ export default function MeetingView() {
     ]
     navigator.clipboard.writeText(lines.join('\n')).then(() => notify('Ringkasan WA tersalin'))
   }
-  const SLIDES = ['Headline & service metrics', 'Komplain per level & tren', 'Komparasi week by week & month by month', 'Voice of Customer — Top 5', 'Action tracker', 'Insight untuk management', 'Review online & CSAT outlet', 'Integritas waktu', 'Kualitas data & keputusan']
+  const SLIDES = ['Headline & service metrics', 'Komplain per level & tren', 'Komparasi week by week & month by month', 'Voice of Customer — Top 5', 'Action tracker', 'Insight untuk management', 'Review online & CSAT outlet', 'Tracker complimentary', 'Integritas waktu', 'Kualitas data & keputusan']
 
   return (
     <div className="bg-cream min-h-screen">
@@ -111,6 +112,7 @@ export default function MeetingView() {
         <Slide n={0} title={SLIDES[0]} refs={refs}>
           <Headline d={d} />
           <div className="mt-4"><MetricsTable d={d} /></div>
+          {d.members && <div className="mt-4"><MemberTable d={d} /></div>}
           {data.prevMeetingDate && <p className="text-sm text-mute mt-3">Meeting terkunci sebelumnya: {fmtD(data.prevMeetingDate)}.</p>}
         </Slide>
         <Slide n={1} title={SLIDES[1]} refs={refs}>
@@ -118,6 +120,7 @@ export default function MeetingView() {
             <LevelTable d={d} />
             <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold mb-2">Jenis komplain</div><HBar rows={d.jenis} /></div>
           </div>
+          <div className="mt-4"><LevelBreakdown d={d} meeting /></div>
           {d.sourceGroups?.length > 0 && (
             <div className="bg-white rounded-2xl border border-line p-4 mt-4">
               <div className="font-bold mb-3">Sumber komplain</div>
@@ -217,9 +220,12 @@ export default function MeetingView() {
           </div>
         </Slide>
         <Slide n={7} title={SLIDES[7]} refs={refs}>
-          {d.integrity ? <IntegrityBody d={d.integrity} compact /> : <div className="text-mute">Belum ada data integritas.</div>}
+          {d.komp ? <div className="space-y-4"><KompSummary d={d.komp} /><div className="grid gap-4 lg:grid-cols-2"><GroupTable title="Per bentuk complimentary" rows={d.komp.byJenis} nameLabel="Bentuk" /><GroupTable title="Per level komplain" rows={d.komp.byLevel} nameLabel="Level" /></div></div> : <div className="text-mute">Belum ada data.</div>}
         </Slide>
         <Slide n={8} title={SLIDES[8]} refs={refs}>
+          {d.integrity ? <IntegrityBody d={d.integrity} compact /> : <div className="text-mute">Belum ada data integritas.</div>}
+        </Slide>
+        <Slide n={9} title={SLIDES[9]} refs={refs}>
           <div className="text-lg">{d.volume.dataIssues === 0 ? '✓ Semua case periode ini lolos Cek Data.' : <>⚠ <b>{d.volume.dataIssues}</b> case perlu dicek sebelum angka dipakai. <Link className="text-brick underline no-print" to={`/case?dataIssue=true&from=${d.period.from}&to=${d.period.to}`}>Lihat daftar</Link></>}</div>
           <div className="mt-4 text-lg">Kompensasi di luar CRM.STD.001: <b>{d.volume.countLuarStandard}</b> case, {fmtRp(d.volume.biayaLuarStandard)}.</div>
           {d.insights.kompensasi && <p className="text-mute mt-1">{d.insights.kompensasi}</p>}

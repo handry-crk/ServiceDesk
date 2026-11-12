@@ -490,3 +490,32 @@ def test_parse_frozen_notes():
     assert r == {"ekspedisi": "J&T Express", "orderNoFromNotes": "586279494678512944", "produk": "Mozza AP"}
     assert p("Rekap Frozen #3; Shopee / SPX Instan; produk Mix 3 pcs Mozza; kode produksi A0901")["kodeProduksi"] == "A0901"
     assert p(None) == {}
+
+
+def test_member_frt_level_breakdown_komp_tracker(ctx):
+    c, H, o = ctx
+    L = login(c, "Lead", "123123")
+    a = mk(c, H, o, subJenis="Undercooked", ringkasan="mentah", waktuMasuk=wib_iso(2026, 9, 2, 10, 0)).json()
+    b = mk(c, H, o, subJenis="Kontaminasi", ringkasan="rambut", waktuMasuk=wib_iso(2026, 9, 3, 10, 0)).json()
+    d = mk(c, H, o, subJenis="Undercooked", ringkasan="mentah 2", waktuMasuk=wib_iso(2026, 9, 9, 10, 0)).json()
+    for k, mins in ((a, 4), (b, 40), (d, 10)):
+        c.post(f"/api/cases/{k['caseId']}/correct-time", json={"field": "waktuFirstResponse", "value": wib_iso(2026, 9, int(k["tanggalMasuk"][-2:]), 10, mins), "reason": "uji"}, headers=L)
+    m = c.get("/api/masters", headers=H).json()
+    komp = next(x for x in m["kompensasi"] if x.get("voucherJenis"))
+    r = c.post(f"/api/cases/{a['caseId']}/resolve", json={"rootCause": "goreng kurang lama", "kompensasiKey": komp["key"]}, headers=L).json()
+    dash = c.get("/api/dashboard", params={"from": "2026-09-01", "to": "2026-09-30"}, headers=H).json()
+    mem = {x["name"]: x for x in dash["members"]}
+    assert mem["Admin"]["count"] == 3 and mem["Admin"]["avgFrt"] == 18 and mem["Admin"]["medianFrt"] == 10
+    crit = next(x for x in dash["levelDetail"]["levels"] if x["level"] == "Critical")
+    assert crit["count"] == 3 and crit["subJenis"][0] == {**crit["subJenis"][0], "name": "Undercooked", "count": 2}
+    assert crit["summary"].startswith("Critical 3 case: Undercooked 2, Kontaminasi 1")
+    w = dash["levelDetail"]["weeks"]
+    assert w[0]["Critical"] == 2 and w[1]["Critical"] == 1 and w[0]["criticalDetail"]["Undercooked"] == 1
+    kt = c.get("/api/kompensasi-tracker", params={"from": "2026-09-01", "to": "2026-09-30"}, headers=H).json()
+    row = next(x for x in kt["rows"] if x["caseId"] == a["caseId"])
+    assert kt["summary"]["cases"] >= 1 and row["level"] == "Critical"
+    if r.get("voucher"):
+        assert row["status"] == "Diterbitkan" and row["kode"] and row["kadaluarsa"]
+        c.post(f"/api/vouchers/{row['kode']}/status", json={"status": "Terpakai"}, headers=H)
+        kt = c.get("/api/kompensasi-tracker", params={"from": "2026-09-01", "to": "2026-09-30"}, headers=H).json()
+        assert kt["summary"]["terpakai"] == 1 and kt["summary"]["redemption"] == 1

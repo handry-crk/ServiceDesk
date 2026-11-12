@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Compare from './Compare.jsx'
 import Frozen from './Frozen.jsx'
+import Kompensasi from './Kompensasi.jsx'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Cell, LabelList } from 'recharts'
 import { api, useApp, useAsync, fmtNum, fmtPct, fmtRp, fmtMin, presets, fmtD } from '../lib.jsx'
 import { Card, ErrorBox, Skeleton, PeriodPicker, StatusPill, Info, Delta, CARA_HITUNG, LevelBadge, inputCls } from '../ui.jsx'
@@ -129,6 +130,99 @@ export function LevelTable({ d }) {
   )
 }
 
+export function MemberTable({ d }) {
+  const tg = d.targets.frt?.target
+  const rows = d.members || []
+  return (
+    <Card className="overflow-x-auto">
+      <h3 className="font-bold p-4 pb-1">First response per member<Info text="Dihitung per orang yang menekan Sudah dibalas (data impor sheet lama: kolom CS agent). FRT = waktu dibalas − waktu masuk. Sistem = jam tombol benar-benar ditekan." /></h3>
+      <p className="text-xs text-mute px-4 pb-2">Target FRT rata-rata ≤ {tg} mnt · target per channel tetap dipakai untuk % SLA.</p>
+      <table className="w-full text-sm">
+        <thead className="text-left text-mute"><tr>{['Member', 'Dibalas', 'FRT rata-rata', 'Median', 'Jam kerja', '% SLA', 'Telat', 'Critical telat', 'FRT sistem', '% jam manual'].map((h) => <th key={h} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.name} className="border-t border-line tabnum">
+            <td className="px-3 py-2 font-semibold">{r.name}</td><td className="px-3 py-2">{r.count}</td>
+            <td className={`px-3 py-2 font-bold ${r.onTarget === false ? 'text-brick' : r.onTarget ? 'text-ok' : ''}`}>{fmtMin(r.avgFrt)}</td>
+            <td className="px-3 py-2">{fmtMin(r.medianFrt)}</td><td className="px-3 py-2">{fmtMin(r.avgFrtWork)}</td>
+            <td className="px-3 py-2">{fmtPct(r.slaResponse)}</td><td className="px-3 py-2">{r.late}</td>
+            <td className={`px-3 py-2 ${r.criticalLate ? 'text-brick font-bold' : ''}`}>{r.criticalLate}/{r.critical}</td>
+            <td className="px-3 py-2">{fmtMin(r.frtSystem)}</td><td className="px-3 py-2">{fmtPct(r.manualPct)}</td>
+          </tr>))}
+          {rows.length === 0 && <tr><td colSpan={10} className="px-3 py-4 text-mute">Belum ada case yang dibalas.</td></tr>}
+        </tbody>
+      </table>
+    </Card>
+  )
+}
+
+export function LevelBreakdown({ d, meeting }) {
+  const [open, setOpen] = useState('Critical')
+  const ld = d.levelDetail
+  if (!ld) return null
+  return (
+    <Card className="p-4">
+      <h3 className="font-bold mb-1">Breakdown komplain per level & tren</h3>
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr] mt-2">
+        <div className="space-y-2">
+          {ld.levels.map((lv) => {
+            const isOpen = meeting || open === lv.level
+            const max = Math.max(...lv.subJenis.map((x) => x.count), 1)
+            return (
+              <div key={lv.level} className="rounded-xl border border-line">
+                <button type="button" onClick={() => setOpen(isOpen && !meeting ? null : lv.level)} className="w-full flex flex-wrap items-center gap-2 px-3 py-2 text-left">
+                  <LevelBadge level={lv.level === 'Belum Terklasifikasi' ? null : lv.level} />
+                  <span className="font-extrabold tabnum">{lv.count} case</span><span className="text-xs text-mute">{fmtPct(lv.pct)} · {lv.open} open · same-day {fmtPct(lv.sameDay)} · {fmtRp(lv.biaya)}</span>
+                  {!meeting && <span className="ml-auto text-mute">{isOpen ? '▾' : '▸'}</span>}
+                </button>
+                {isOpen && <div className="px-3 pb-3 space-y-1.5">
+                  {lv.subJenis.map((x) => (
+                    <div key={x.name} className="grid grid-cols-[minmax(0,1fr)_2fr_auto] items-center gap-2 text-sm" title={x.outlets.join(', ')}>
+                      <span className="truncate">{x.name}</span>
+                      <div className="h-3 rounded bg-cream"><div className="h-3 rounded" style={{ width: `${(x.count / max) * 100}%`, background: LEVEL_COLOR[lv.level] || MUTE }} /></div>
+                      <span className="tabnum font-semibold w-16 text-right">{x.count} <span className="text-xs text-mute font-normal">{fmtPct(x.pct)}</span></span>
+                    </div>))}
+                </div>}
+              </div>
+            )
+          })}
+          {ld.levels.length === 0 && <p className="text-sm text-mute">Belum ada komplain.</p>}
+        </div>
+        <div>
+          <div className="text-sm font-semibold mb-1">Tren mingguan per level</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={ld.weeks} margin={{ left: 0, right: 8, top: 10, bottom: 0 }} barCategoryGap="25%">
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="week" tick={axis} tickLine={false} axisLine={{ stroke: GRID }} />
+              <YAxis tick={axis} tickLine={false} axisLine={false} width={32} allowDecimals={false} />
+              <Tooltip content={<LevelTip weeks={ld.weeks} />} cursor={{ fill: '#F5F0E6' }} />
+              {['Minor', 'Major', 'Critical'].map((k, i) => <Bar key={k} dataKey={k} stackId="l" fill={LEVEL_COLOR[k]} stroke="#fff" strokeWidth={1} radius={i === 2 ? [4, 4, 0, 0] : 0} maxBarSize={36} />)}
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="flex gap-3 text-xs text-mute">{['Minor', 'Major', 'Critical'].map((k) => <span key={k} className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: LEVEL_COLOR[k] }} />{k}</span>)}</div>
+          <table className="w-full text-xs mt-3">
+            <thead className="text-left text-mute"><tr><th className="py-1">Minggu</th><th>Minor</th><th>Major</th><th>Critical</th><th>Isi Critical</th></tr></thead>
+            <tbody>{ld.weeks.map((w) => <tr key={w.week} className="border-t border-line tabnum align-top"><td className="py-1 font-semibold whitespace-nowrap">{w.week} <span className="text-mute font-normal">{fmtD(w.start)}</span></td><td>{w.Minor}</td><td>{w.Major}</td><td className={w.Critical ? 'text-brick font-bold' : ''}>{w.Critical}</td>
+              <td>{Object.entries(w.criticalDetail).map(([k, v]) => `${k} ${v}`).join(', ') || '–'}</td></tr>)}</tbody>
+          </table>
+        </div>
+      </div>
+      <ul className="mt-3 text-sm space-y-0.5">{ld.levels.filter((l) => l.level !== 'Minor').map((l) => <li key={l.level}>• {l.summary}</li>)}</ul>
+    </Card>
+  )
+}
+
+function LevelTip({ active, payload, label, weeks }) {
+  if (!active || !payload?.length) return null
+  const w = weeks.find((x) => x.week === label)
+  return (
+    <div className="bg-white border border-line rounded-xl shadow px-3 py-2 text-xs">
+      <div className="font-semibold mb-1">{label}: {fmtD(w.start)} – {fmtD(w.end)}</div>
+      {[...payload].reverse().map((p) => <div key={p.dataKey}>{p.dataKey}: <b>{p.value}</b></div>)}
+      {Object.keys(w.criticalDetail).length > 0 && <div className="mt-1 text-brick">Critical: {Object.entries(w.criticalDetail).map(([k, v]) => `${k} ${v}`).join(', ')}</div>}
+    </div>
+  )
+}
+
 export function HBar({ rows, dataKey = 'count', name = 'Jumlah', height, color = BRICK, colorBy, fmt = fmtNum, link }) {
   const h = height || Math.max(160, rows.length * 34 + 30)
   return (
@@ -187,6 +281,8 @@ export function DashboardBody({ d, meeting }) {
         <MetricsTable d={d} />
         <LevelTable d={d} />
       </div>
+      <LevelBreakdown d={d} />
+      <MemberTable d={d} />
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="Komplain per sub jenis (top 10)" insight={d.insights.subJenis}>
           <HBar rows={d.subJenis.slice(0, 10)} colorBy={(r) => LEVEL_COLOR[r.levelStandard] || MUTE}
@@ -251,25 +347,25 @@ export default function Dashboard() {
   const [area, setArea] = useState('')
   const [sp, setSp] = useSearchParams()
   const [line, setLine] = useState('')
-  const view = ['komparasi', 'frozen'].includes(sp.get('view')) ? sp.get('view') : 'periode'
+  const view = ['komparasi', 'frozen', 'complimentary'].includes(sp.get('view')) ? sp.get('view') : 'periode'
   const { data: d, loading, error } = useAsync(() => view === 'periode' ? api('/dashboard', { params: { ...period, brand, area, line } }) : Promise.resolve(null), [period.from, period.to, brand, area, line, view])
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <div><h1 className="text-2xl font-extrabold">Dashboard Service Excellence</h1>
           {d && view === 'periode' && <p className="text-sm text-mute">{fmtD(d.period.from)} – {fmtD(d.period.to)} · dibandingkan {fmtD(d.period.prevFrom)} – {fmtD(d.period.prevTo)}</p>}</div>
-        {view !== 'frozen' && <div className="flex flex-wrap gap-2">
+        {!['frozen'].includes(view) && <div className="flex flex-wrap gap-2">
           <select className={inputCls + ' !min-h-[40px] w-auto'} value={line} onChange={(e) => setLine(e.target.value)} title="Lini bisnis"><option value="">Semua lini</option><option value="outlet">Outlet & gerobak</option><option value="frozen">Frozen food</option></select>
           <select className={inputCls + ' !min-h-[40px] w-auto'} value={brand} onChange={(e) => setBrand(e.target.value)}><option value="">Semua brand</option>{masters?.brands.map((b) => <option key={b}>{b}</option>)}</select>
           <select className={inputCls + ' !min-h-[40px] w-auto'} value={area} onChange={(e) => setArea(e.target.value)}><option value="">Semua area</option>{masters?.areas.map((b) => <option key={b}>{b}</option>)}</select>
         </div>}
       </div>
       <div className="flex flex-wrap gap-1 mb-4 bg-white border border-line rounded-xl p-1 w-fit">
-        {[['periode', 'Ringkasan periode'], ['komparasi', 'Komparasi week / month'], ['frozen', 'Frozen food']].map(([k, l]) => (
+        {[['periode', 'Ringkasan periode'], ['komparasi', 'Komparasi week / month'], ['frozen', 'Frozen food'], ['complimentary', 'Tracker complimentary']].map(([k, l]) => (
           <button key={k} onClick={() => setSp(k === 'periode' ? {} : { view: k })} className={`px-4 min-h-[40px] rounded-lg text-sm font-semibold ${view === k ? 'bg-brick text-white' : 'hover:bg-cream'}`}>{l}</button>
         ))}
       </div>
-      {view === 'frozen' ? <Frozen /> : view === 'komparasi' ? <Compare brand={brand} area={area} line={line} /> : <>
+      {view === 'frozen' ? <Frozen /> : view === 'complimentary' ? <Kompensasi brand={brand} area={area} line={line} /> : view === 'komparasi' ? <Compare brand={brand} area={area} line={line} /> : <>
       <div className="mb-4"><PeriodPicker value={period} onChange={setPeriod} /></div>
       <ErrorBox error={error} />
       {loading && !d ? <div className="grid gap-3"><Skeleton /><Skeleton h="h-64" /></div> : d && <div className={loading ? 'opacity-60 transition' : 'transition'}><DashboardBody d={d} /></div>}

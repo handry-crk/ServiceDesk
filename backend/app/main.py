@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .core import init_db, Config, log
 from .services import seed_if_empty
-from . import routes_cases, routes_other, routes_register, routes_integrity
+from . import routes_cases, routes_other, routes_register, routes_integrity, routes_komp
 
 STATIC_DIR = os.getenv("STATIC_DIR", os.path.join(os.path.dirname(__file__), "..", "static"))
 
@@ -42,6 +42,7 @@ app.include_router(routes_cases.router)
 app.include_router(routes_other.router)
 app.include_router(routes_register.router)
 app.include_router(routes_integrity.router)
+app.include_router(routes_komp.router)
 
 
 @app.get("/api/health")

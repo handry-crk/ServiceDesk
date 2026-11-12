@@ -232,11 +232,17 @@ OUTLETS = [
     "Irigasi Pekayon", "Kemang Raya Bekasi", "Kios Suryakencana", "Jagakarsa", "Sumatra (Tangsel)", "Cingised",
     "UPI 2", "Ujung Berung", "Menceng Raya", "Kartini Raya", "Pahlawan 2", "Puri Jaya Tangerang",
     "Kios Permata Cimahi", "Villa Kencana Sukatani", "Kalibaru Cilincing",
+    "Kemang Raya 4 Gacoan", "Kurdi", "Central Kitchen Meruya", "Mekarsari Depok",
 ]
+
+# Outlet baru: ditambahkan otomatis ke database yang sudah berjalan (bila namanya belum ada)
+NEW_OUTLETS = {"Kemang Raya 4 Gacoan": "Belum diatur", "Kurdi": "Bandung",
+               "Central Kitchen Meruya": "Jakarta", "Mekarsari Depok": "Depok"}
 
 AREAS = ["Jakarta", "Bandung", "Bekasi", "Depok", "Bogor", "Tangsel", "Tangerang", "Cimahi", "Online", "Belum diatur"]
 
 _AREA_HINTS = [
+    ("mekarsari", "Depok"), ("meruya", "Jakarta"), ("kurdi", "Bandung"),
     ("online", "Online"), ("bekasi", "Bekasi"), ("pekayon", "Bekasi"), ("jatiwaringin", "Bekasi"),
     ("karang asih", "Bekasi"), ("sukatani", "Bekasi"), ("cileungsi", "Bogor"), ("bogor", "Bogor"),
     ("cimahpar", "Bogor"), ("suryakencana", "Bogor"), ("cijeruk", "Bogor"), ("pahlawan", "Bogor"),

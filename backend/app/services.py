@@ -60,6 +60,11 @@ async def seed_if_empty():
         await db.outlets.insert_many([
             {"id": new_id(), "name": n, "type": S.outlet_type(n), "area": S.guess_area(n),
              "brand": "Cimol Bojot AA", "aliases": [], "active": True} for n in S.OUTLETS])
+    for n, area in S.NEW_OUTLETS.items():
+        if not await db.outlets.find_one({"name": n}):
+            await db.outlets.insert_one({"id": new_id(), "name": n, "type": S.outlet_type(n), "area": area,
+                                         "brand": "Cimol Bojot AA", "aliases": [], "active": True})
+            log.info("Outlet baru ditambahkan: %s", n)
     if await db.users.count_documents({}) == 0:
         await db.users.insert_one({"id": new_id(), "name": "Admin", "role": "Admin", "areas": [],
                                    "pinHash": hash_pin(Config.DEFAULT_ADMIN_PIN), "active": True, "created": now()})

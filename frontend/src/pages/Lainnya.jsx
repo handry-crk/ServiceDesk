@@ -8,6 +8,7 @@ export default function Lainnya() {
     { to: '/csat', t: 'CSAT Outlet', d: 'Respons form survei outlet, cocokkan outlet, link/QR survei.' },
     { to: '/review', t: 'Review & Rating Online', d: 'Review komplain GoFood/GrabFood, status tindak lanjut, rating per outlet.' },
     { to: '/voucher', t: 'Kode Voucher', d: 'Stok voucher kompensasi, status diterbitkan/terpakai.' },
+    ...(can('Admin', 'CS Lead', 'Marketing TL') ? [{ to: '/integritas', t: 'Integritas waktu', d: 'Pengajuan koreksi jam dibalas, pengawasan per CS, audit acak mingguan.' }] : []),
     ...(can(...LEAD) ? [{ to: '/pengaturan', t: 'Pengaturan', d: 'Standard CRM.STD.001, target, outlet, user, transaksi bulanan, impor sheet lama, backup.' }] : []),
   ]
   return (

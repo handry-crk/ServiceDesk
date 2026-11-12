@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fmtDT, fmtMin } from './lib.jsx'
-import { LevelBadge, StatusBadge, inputCls } from './ui.jsx'
+import { fmtDT, fmtMin, api, useApp, compressImage } from './lib.jsx'
+import { LevelBadge, StatusBadge, inputCls, Btn } from './ui.jsx'
 
 export function useNow(ms = 30000) {
   const [n, setN] = useState(Date.now())
@@ -90,3 +90,26 @@ export function Combo({ items, value, onChange, placeholder, recent = [], render
 }
 
 export const levelItemBadge = (i) => i.level ? <LevelBadge level={i.level} /> : null
+
+export function PhotoPick({ value, onChange, label = 'Upload screenshot' }) {
+  const { notify } = useApp()
+  const ref = useRef()
+  const [busy, setBusy] = useState(false)
+  const pick = async (f) => {
+    if (!f) return
+    setBusy(true)
+    try {
+      const blob = await compressImage(f)
+      const fd = new FormData(); fd.append('file', blob, 'bukti.jpg')
+      const r = await api('/uploads', { method: 'POST', form: fd })
+      onChange(r.url)
+    } catch (e) { notify(e.message, 'err') } finally { setBusy(false) }
+  }
+  return (
+    <div className="flex items-center gap-3">
+      {value && <a href={value} target="_blank" rel="noreferrer"><img src={value} className="w-16 h-16 object-cover rounded-lg border border-line" alt="bukti" /></a>}
+      <Btn kind="ghost" size="sm" type="button" disabled={busy} onClick={() => ref.current.click()}>{busy ? 'Mengunggah…' : value ? 'Ganti screenshot' : label}</Btn>
+      <input ref={ref} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files[0])} />
+    </div>
+  )
+}

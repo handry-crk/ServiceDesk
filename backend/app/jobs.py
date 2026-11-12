@@ -69,9 +69,33 @@ async def morning():
     today = wib_date(now()).isoformat()
     overdue = await db.voc_actions.count_documents({"status": {"$in": ["Open", "On Progress"]}, "deadline": {"$lt": today}})
     drafts = await db.csat.count_documents({"triage": "belum", "needsTriage": True})
+    pend = await db.cases.count_documents({"timeRequest.id": {"$exists": True}})
     text = (f"Pagi ini: {open_} case belum selesai ({crit} Critical), {overdue} action meeting lewat deadline, "
-            f"{drafts} draft CSAT menunggu.")
+            f"{drafts} draft CSAT menunggu" + (f", {pend} pengajuan jam dibalas menunggu persetujuan." if pend else "."))
     await notify("morning", text, None, "Service Desk — ringkasan pagi")
+    await integrity_alert()
+
+
+async def integrity_alert():
+    """CS dengan % jam dibalas manual di atas batas (7 hari terakhir) → notifikasi CRM Supervisor."""
+    from .routes_integrity import build_integrity
+    from .auth import LEAD
+    t = wib_date(now())
+    d = await build_integrity((t - timedelta(days=7)).isoformat(), (t - timedelta(days=1)).isoformat())
+    for r in d["rows"]:
+        if r["flags"]:
+            await notify("integrity", f"Integritas waktu {r['name']} (7 hari): " + "; ".join(r["flags"]) + ".",
+                         None, roles=LEAD, link="/integritas")
+
+
+async def weekly_audit():
+    from .routes_integrity import create_audit, last_week
+    from .auth import LEAD
+    ws, we = last_week()
+    a, created = await create_audit(ws, "Sistem")
+    if created and a["items"]:
+        await notify("audit", f"Audit acak minggu {ws.isoformat()} s/d {we.isoformat()} siap: {len(a['items'])} case "
+                              f"untuk dicocokkan dengan chat asli.", None, roles=LEAD, link="/integritas")
 
 
 async def weekly_recap():
@@ -139,6 +163,7 @@ def start_scheduler():
     s.add_job(critical_alert, "interval", minutes=5, id="critical")
     s.add_job(morning, "cron", hour=8, minute=0, id="morning")
     s.add_job(weekly_recap, "cron", day_of_week="mon", hour=8, minute=30, id="weekly")
+    s.add_job(weekly_audit, "cron", day_of_week="mon", hour=7, minute=40, id="audit")
     s.add_job(voucher_expiry, "cron", hour=0, minute=10, id="voucher")
     s.add_job(backup, "cron", day_of_week="sun", hour=2, minute=0, id="backup")
     s.add_job(nightly_recompute, "cron", hour=0, minute=20, id="recompute")

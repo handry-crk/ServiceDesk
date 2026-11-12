@@ -98,12 +98,19 @@ function Target() {
             <label className="text-xs flex items-center gap-1 pb-2"><input type="checkbox" checked={x.countInSla} onChange={(e) => setCh(ch.map((y, j) => j === i ? { ...y, countInSla: e.target.checked } : y))} />SLA</label></div>))}</div>
       </Card>
       <Card className="p-4">
-        <div className="flex items-center justify-between mb-2"><h3 className="font-bold">Jam operasional CS & notifikasi</h3><Btn size="sm" onClick={() => save('settings', st)}>Simpan</Btn></div>
+        <div className="flex items-center justify-between mb-2"><h3 className="font-bold">Jam operasional CS, notifikasi & integritas waktu</h3><Btn size="sm" onClick={() => save('settings', st)}>Simpan</Btn></div>
         <div className="grid sm:grid-cols-4 gap-3">
           <Field label="Jam mulai"><input type="time" className={c} value={st.opStart} onChange={(e) => setSt({ ...st, opStart: e.target.value })} /></Field>
           <Field label="Jam selesai"><input type="time" className={c} value={st.opEnd} onChange={(e) => setSt({ ...st, opEnd: e.target.value })} /></Field>
           <Field label="Alert Critical setelah (menit)"><input className={c} value={st.alertCriticalAfterMin} onChange={(e) => setSt({ ...st, alertCriticalAfterMin: Number(e.target.value) || 20 })} /></Field>
           <Field label="Voucher hangus setelah (hari)"><input className={c} value={st.voucherExpiryDays} onChange={(e) => setSt({ ...st, voucherExpiryDays: Number(e.target.value) || 30 })} /></Field>
+          <div className="sm:col-span-4 pt-2 border-t border-line font-bold text-sm">Integritas waktu (anti mundur-jam)</div>
+          <Field label="Mundur jam dibalas langsung diterima s/d (menit)" hint="Lebih dari ini perlu screenshot + persetujuan"><input className={c} inputMode="numeric" value={st.frGraceMin} onChange={(e) => setSt({ ...st, frGraceMin: Number(e.target.value) || 0 })} /></Field>
+          <Field label="Batas CS mundurkan jam dibalas (menit)" hint="Lebih dari ini hanya CRM Supervisor"><input className={c} inputMode="numeric" value={st.frMaxBackMin} onChange={(e) => setSt({ ...st, frMaxBackMin: Number(e.target.value) || 0 })} /></Field>
+          <Field label="CS boleh ubah jam dibalas dalam (jam)" hint="Sekali per case"><input className={c} inputMode="numeric" value={st.frEditHours} onChange={(e) => setSt({ ...st, frEditHours: Number(e.target.value) || 0 })} /></Field>
+          <Field label="Waktu masuk wajib alasan bila lebih dari (menit)"><input className={c} inputMode="numeric" value={st.masukLagReasonMin} onChange={(e) => setSt({ ...st, masukLagReasonMin: Number(e.target.value) || 0 })} /></Field>
+          <Field label="Alert bila jam manual CS di atas (%)"><input className={c} inputMode="numeric" value={Math.round((st.manualAlertPct ?? 0.15) * 100)} onChange={(e) => setSt({ ...st, manualAlertPct: (Number(e.target.value) || 0) / 100 })} /></Field>
+          <Field label="Audit acak per CS per minggu (case)"><input className={c} inputMode="numeric" value={st.auditSamplePerCs} onChange={(e) => setSt({ ...st, auditSamplePerCs: Number(e.target.value) || 0 })} /></Field>
           <div className="sm:col-span-4"><Field label="Email penerima alert & rekap (pisahkan koma)"><input className={c} value={(st.emailRecipients || []).join(', ')} onChange={(e) => setSt({ ...st, emailRecipients: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} /></Field></div>
         </div>
       </Card>

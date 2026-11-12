@@ -18,6 +18,7 @@ const Csat = lazy(() => import('./pages/Csat.jsx'))
 const Reviews = lazy(() => import('./pages/Reviews.jsx'))
 const Vouchers = lazy(() => import('./pages/Vouchers.jsx'))
 const Settings = lazy(() => import('./pages/Settings.jsx'))
+const Integritas = lazy(() => import('./pages/Integritas.jsx'))
 
 const NAV = [
   { to: '/', label: 'Inbox', icon: 'M4 4h16v12H5.2L4 17.2V4zm2 7h4l1 2h2l1-2h4', end: true },
@@ -154,6 +155,7 @@ export default function App() {
           <Route path="/review" element={<Reviews />} />
           <Route path="/voucher" element={<Vouchers />} />
           <Route path="/pengaturan" element={<Settings />} />
+          <Route path="/integritas" element={<Integritas />} />
           <Route path="/login" element={<Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

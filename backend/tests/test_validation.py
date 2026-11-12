@@ -373,32 +373,79 @@ def test_csat_complaint_and_outlet(ctx):
 def test_first_response_time_edit(ctx):
     c, H, o = ctx
     A = login(c, "Agen", "123123")
+    L = login(c, "Lead", "123123")
     now_w = datetime.now(WIB).replace(second=0, microsecond=0)
     masuk = now_w - timedelta(hours=3)
-    k = mk(c, A, o, subJenis="Speed of Service", waktuMasuk=masuk.isoformat()).json()
+    # waktu masuk > 30 menit lalu tanpa alasan → ditolak untuk CS
+    assert mk(c, A, o, subJenis="Speed of Service", waktuMasuk=masuk.isoformat()).status_code == 400
+    k = mk(c, A, o, subJenis="Speed of Service", waktuMasuk=masuk.isoformat(), waktuMasukReason="chat malam baru dibaca").json()
     cid = k["caseId"]
-    # dibalas 2 jam lalu tanpa alasan → ditolak; sebelum masuk / masa depan → ditolak
-    at = (now_w - timedelta(hours=2)).isoformat()
-    assert c.post(f"/api/cases/{cid}/respond", json={"at": at}, headers=A).status_code == 400
+    assert k["masukLagMin"] >= 179
+    # validasi dasar
     assert c.post(f"/api/cases/{cid}/respond", json={"at": (masuk - timedelta(minutes=5)).isoformat(), "reason": "x"}, headers=A).status_code == 400
     assert c.post(f"/api/cases/{cid}/respond", json={"at": (now_w + timedelta(hours=1)).isoformat(), "reason": "x"}, headers=A).status_code == 400
-    r = c.post(f"/api/cases/{cid}/respond", json={"at": at, "reason": "lupa klik, balas via WA"}, headers=A).json()
-    assert r["status"] == "Responded" and r["frtMin"] == 60 and r["frtManual"] is True
-    # sudah dibalas → respond lagi ditolak; CS boleh ubah waktu dibalas lewat correct-time
-    assert c.post(f"/api/cases/{cid}/respond", json={}, headers=A).status_code == 400
-    r = c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuFirstResponse", "value": (masuk + timedelta(minutes=10)).isoformat(), "reason": "salah jam"}, headers=A).json()
-    assert r["frtMin"] == 10
-    # CS tidak boleh mengosongkan atau mengubah waktu lain
+    # > 120 menit ke belakang: CS ditolak
+    assert c.post(f"/api/cases/{cid}/respond", json={"at": (now_w - timedelta(minutes=150)).isoformat(), "reason": "x", "photo": "/u/a.jpg"}, headers=A).status_code == 400
+    # 90 menit ke belakang: wajib alasan + screenshot, lalu menunggu persetujuan
+    at = (now_w - timedelta(minutes=90)).isoformat()
+    assert c.post(f"/api/cases/{cid}/respond", json={"at": at, "reason": "balas dari HP"}, headers=A).status_code == 400
+    r = c.post(f"/api/cases/{cid}/respond", json={"at": at, "reason": "balas dari HP", "photo": "/u/a.jpg"}, headers=A).json()
+    assert r["status"] == "Responded" and r["timeRequest"]["frtAfter"] == 90 and r["frtMin"] >= 179 and r["frtSystemMin"] >= 179
+    assert "Info: Jam dibalas menunggu persetujuan" in r["dataIssues"]
+    assert any(x["caseId"] == cid for x in c.get("/api/time-requests", headers=L).json())
+    assert c.get("/api/time-requests", headers=A).status_code == 403
+    assert c.post(f"/api/cases/{cid}/time-request/approve", headers=A).status_code == 403
+    r = c.post(f"/api/cases/{cid}/time-request/approve", json={}, headers=L).json()
+    assert r["frtMin"] == 90 and r["frtManual"] is True and not r.get("timeRequest") and r["frBackdateMin"] >= 89
+    # mundur ≤ 15 menit: langsung diterima
+    k2 = mk(c, A, o, subJenis="Hospitality", ringkasan="uji fr 2", waktuMasuk=(now_w - timedelta(minutes=20)).isoformat()).json()
+    r = c.post(f"/api/cases/{k2['caseId']}/respond", json={"at": (now_w - timedelta(minutes=10)).isoformat()}, headers=A).json()
+    assert r["frtMin"] == 10 and r["frtManual"] is True and not r.get("timeRequest")
+    # ubah jam dibalas jadi LEBIH LAMA: langsung; sekali saja
+    r = c.post(f"/api/cases/{k2['caseId']}/correct-time", json={"field": "waktuFirstResponse", "value": (now_w - timedelta(minutes=5)).isoformat(), "reason": "salah jam"}, headers=A).json()
+    assert r["frtMin"] == 15 and r["frEditCount"] == 1
+    assert c.post(f"/api/cases/{k2['caseId']}/correct-time", json={"field": "waktuFirstResponse", "value": (now_w - timedelta(minutes=4)).isoformat(), "reason": "lagi"}, headers=A).status_code == 403
+    # ubah jadi LEBIH CEPAT: perlu screenshot + persetujuan; ditolak → tidak berubah
+    k3 = mk(c, A, o, subJenis="Hospitality", ringkasan="uji fr 3", waktuMasuk=(now_w - timedelta(minutes=25)).isoformat()).json()
+    c.post(f"/api/cases/{k3['caseId']}/respond", headers=A)
+    body = {"field": "waktuFirstResponse", "value": (now_w - timedelta(minutes=22)).isoformat(), "reason": "lupa tekan"}
+    assert c.post(f"/api/cases/{k3['caseId']}/correct-time", json=body, headers=A).status_code == 400
+    r = c.post(f"/api/cases/{k3['caseId']}/correct-time", json={**body, "photo": "/u/b.jpg"}, headers=A).json()
+    assert r["timeRequest"] and r["frtMin"] >= 24
+    assert c.post(f"/api/cases/{k3['caseId']}/time-request/reject", json={}, headers=L).status_code == 400
+    r = c.post(f"/api/cases/{k3['caseId']}/time-request/reject", json={"note": "di chat dibalas 11.40"}, headers=L).json()
+    assert r["frtMin"] >= 24 and r["timeRequestLog"][-1]["status"] == "rejected"
+    # CS tidak boleh mengosongkan / mengubah waktu lain
     assert c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuFirstResponse", "value": None, "reason": "x"}, headers=A).status_code == 400
     assert c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuMasuk", "value": masuk.isoformat(), "reason": "x"}, headers=A).status_code == 403
-    # respond tanpa body = sekarang, tidak manual
-    k2 = mk(c, A, o, subJenis="Hospitality", ringkasan="uji fr 2").json()
-    r = c.post(f"/api/cases/{k2['caseId']}/respond", headers=A).json()
-    assert r["status"] == "Responded" and not r.get("frtManual")
-    # Viewer tidak boleh
+    # integritas per CS
+    t = now_w.date().isoformat()
+    ig = c.get("/api/integrity", params={"frm": (now_w.date() - timedelta(days=1)).isoformat(), "to": t}, headers=L).json()
+    row = next(r for r in ig["rows"] if r["name"] == "Agen")
+    assert row["approved"] == 1 and row["rejected"] == 1 and row["manual"] >= 2 and "1 pengajuan ditolak" in row["flags"]
+    assert c.get("/api/integrity", params={"frm": t, "to": t}, headers=A).status_code == 403
+    # audit acak minggu ini
+    au = c.post("/api/audits", json={"weekStart": t}, headers=L).json()
+    assert au["items"] and all(i["cs"] for i in au["items"])
+    item = next(i for i in au["items"] if i["cs"] == "Agen")
+    assert c.post(f"/api/audits/{au['id']}/items/{item['caseId']}", json={"result": "tidak"}, headers=L).status_code == 400
+    c.post(f"/api/audits/{au['id']}/items/{item['caseId']}", json={"result": "tidak", "note": "chat jam 10.15"}, headers=L)
+    assert "Audit: jam tidak cocok dengan chat" in c.get(f"/api/cases/{item['caseId']}", headers=L).json()["dataIssues"]
+    assert c.post("/api/audits", json={"weekStart": t}, headers=L).json()["created"] is False
+    # Viewer tidak boleh membalas
     V = login(c, "Lihat", "123123")
-    k3 = mk(c, A, o, subJenis="Hospitality", ringkasan="uji fr 3").json()
     assert c.post(f"/api/cases/{k3['caseId']}/respond", headers=V).status_code == 403
+    # kunci periode: setelah meeting dikunci, CS & Lead tidak bisa ubah waktu; Admin bisa
+    k4 = mk(c, A, o, subJenis="Hospitality", ringkasan="uji kunci").json()
+    c.post(f"/api/cases/{k4['caseId']}/respond", headers=A)
+    m = c.post("/api/meetings", json={"date": t, "periodStart": t, "periodEnd": t}, headers=L).json()
+    c.post(f"/api/meetings/{m['id']}/lock", headers=L)
+    assert c.get(f"/api/meetings/{m['id']}", headers=L).json()["dashboard"]["integrity"]["total"]["responded"] >= 3
+    b2 = {"field": "waktuFirstResponse", "value": datetime.now(WIB).isoformat(), "reason": "x"}
+    assert c.post(f"/api/cases/{k4['caseId']}/correct-time", json=b2, headers=A).status_code == 403
+    assert c.post(f"/api/cases/{k4['caseId']}/correct-time", json=b2, headers=L).status_code == 403
+    assert c.post(f"/api/cases/{k4['caseId']}/correct-time", json=b2, headers=H).status_code == 200
+    c.delete(f"/api/meetings/{m['id']}", headers=L)
 
 
 def test_frozen_fields_and_dashboard(ctx):

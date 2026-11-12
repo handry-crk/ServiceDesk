@@ -5,6 +5,7 @@ from statistics import mean
 
 from .core import as_utc, wib, wib_date, now, WIB, get_db
 from .standards import NEEDS_BATCH
+from . import standards as S
 
 # CRM.STD.001 5.1: benda asing, potensi keracunan, tidak matang → Factory/Operasional sesuai root cause
 CRITICAL_COST_RC = {"Kontaminasi", "Keracunan", "Undercooked"}
@@ -27,7 +28,7 @@ async def load_ctx():
     outlets = {d["id"]: d async for d in db.outlets.find({})}
     return {
         "subJenis": sj, "channels": ch, "kompensasi": komp,
-        "targets": tg.get("value", {}), "settings": st.get("value", {}),
+        "targets": tg.get("value", {}), "settings": {**S.SETTINGS, **(st.get("value") or {})},
         "pj": pj.get("value", {}), "resTarget": rt.get("value", {}),
         "criticalFrt": rt.get("criticalFrt", 30), "outlets": outlets,
     }
@@ -127,6 +128,19 @@ def compute_case(c: dict, ctx: dict) -> dict:
     else:
         c["frtMin"] = c["frtWorkMin"] = None
         c["slaResponseOk"] = None
+    # integritas waktu: jam sistem (saat tombol ditekan) vs jam yang dilaporkan
+    fr_rec = c.get("frRecordedAt")
+    if has_time and fr_rec and c.get("waktuMasuk"):
+        c["frtSystemMin"] = _minutes(c["waktuMasuk"], fr_rec)
+        c["frBackdateMin"] = max(0, round((as_utc(fr_rec) - as_utc(c["waktuFirstResponse"])).total_seconds() / 60)) \
+            if c.get("waktuFirstResponse") else None
+    else:
+        c["frtSystemMin"] = c["frBackdateMin"] = None
+    c["slaRescued"] = bool(c.get("slaResponseOk") and c.get("frtSystemMin") is not None and c["frtSystemMin"] > tfrt)
+    if c.get("createdAt") and c.get("waktuMasuk") and c.get("source", "manual") == "manual":
+        c["masukLagMin"] = max(0, round((as_utc(c["createdAt"]) - as_utc(c["waktuMasuk"])).total_seconds() / 60))
+    else:
+        c["masukLagMin"] = None
     tres = ctx["resTarget"].get(lvl) if lvl else None
     c["targetResolutionMin"] = tres
     if has_time and c.get("waktuResolved"):
@@ -181,6 +195,10 @@ def data_issues(c, pj_auto):
         iss.append("Mungkin duplikat " + c["possibleDuplicateOf"])
     if c.get("kompensasiOutsideStandard"):
         iss.append("Info: Kompensasi di luar standard")
+    if c.get("timeRequest"):
+        iss.append("Info: Jam dibalas menunggu persetujuan")
+    if c.get("auditResult") == "tidak":
+        iss.append("Audit: jam tidak cocok dengan chat")
     return iss
 
 
@@ -231,6 +249,11 @@ def compute_metrics(cases, targets, total_trx=None):
         "csat": _rate(sum(1 for c in rated if c["puas"]), len(rated)),
         "csatN": len(rated),
         "csatSent": sum(1 for c in contact if c.get("surveySentAt")),
+        "frtSystem": _avg([c.get("frtSystemMin") for c in responded]),
+        "slaResponseSystem": _rate(sum(1 for c in sla_base if c.get("frtSystemMin") is not None and c["frtSystemMin"] <= c.get("targetFrtMin", 5)),
+                                   sum(1 for c in sla_base if c.get("frtSystemMin") is not None)),
+        "manualPct": _rate(sum(1 for c in responded if c.get("frtManual")), sum(1 for c in responded if c.get("frRecordedAt"))),
+        "slaRescued": sum(1 for c in responded if c.get("slaRescued")),
         "csatResponse": _rate(sum(1 for c in contact if c.get("surveySentAt") and c.get("puas") is not None),
                               sum(1 for c in contact if c.get("surveySentAt"))),
     }

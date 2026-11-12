@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from .auth import current_user, require, LEAD, WRITERS, MEETING_EDITORS
 from .core import get_db, now, parse_iso, as_utc, clean, mask_phone, wib_date, Config
 from . import standards as S
-from .logic import load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights
+from .logic import compute_case, load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights
 from .services import (next_case_id, save_case, add_event, audit, find_duplicates, get_case_or_404,
                        survey_token, issue_voucher, new_id)
 
@@ -79,6 +79,7 @@ class CaseIn(BaseModel):
     qtyDiterima: Optional[int] = None
     source: Optional[str] = "manual"
     sourceRefId: Optional[str] = None
+    waktuMasukReason: Optional[str] = None
     force: bool = False
 
 
@@ -105,6 +106,10 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
     w = parse_iso(body.waktuMasuk) if body.waktuMasuk else now()
     if w > now() + timedelta(minutes=2):
         raise HTTPException(400, "Waktu Masuk tidak boleh di masa depan.")
+    lag = (now() - as_utc(w)).total_seconds() / 60
+    lag_max = ctx["settings"]["masukLagReasonMin"]
+    if lag > lag_max and u["role"] not in LEAD and not (body.waktuMasukReason or "").strip():
+        raise HTTPException(400, f"Waktu masuk lebih dari {lag_max} menit yang lalu: tulis alasan kenapa baru dicatat.")
     dups = await find_duplicates(body.outletId, body.subJenis, w, body.orderNo)
     if dups and not body.force:
         raise HTTPException(409, {"message": f"Mungkin sama dengan {', '.join(dups)}. Tetap simpan?",
@@ -124,6 +129,7 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
             ("noResi", body.noResi), ("qtyPesan", body.qtyPesan), ("qtyDiterima", body.qtyDiterima))
            if v not in (None, "")},
         "createdBy": u["name"], "createdAt": now(), "surveyToken": survey_token(),
+        "waktuMasukReason": (body.waktuMasukReason or "").strip() or None,
     }
     sj = ctx["subJenis"][body.subJenis]
     c["picDept"] = sj["picFrozen"] if outlet["type"] == "online_frozen" else sj["picOutlet"]
@@ -239,34 +245,134 @@ def _check_fr_time(c, at):
         raise HTTPException(400, "Waktu dibalas tidak boleh setelah waktu Resolved.")
 
 
+def _mins(a, b):
+    return round((as_utc(b) - as_utc(a)).total_seconds() / 60)
+
+
+async def check_period_lock(c, u):
+    """Periode yang sudah dikunci di meeting tidak bisa diubah waktunya (kecuali Admin)."""
+    if u["role"] == "Admin":
+        return
+    d = c.get("tanggalMasuk") or wib_date(c["waktuMasuk"]).isoformat()
+    m = await get_db().meetings.find_one({"locked": True, "periodStart": {"$lte": d}, "periodEnd": {"$gte": d}})
+    if m:
+        raise HTTPException(403, f"Periode {m['periodStart']} s/d {m['periodEnd']} sudah dikunci di meeting. "
+                                 f"Waktu case ini hanya bisa diubah Admin.")
+
+
+async def _open_request(c, u, value, reason, photo, kind):
+    """Koreksi yang membuat FRT lebih cepat → menunggu persetujuan CRM Supervisor."""
+    from .jobs import notify
+    if not (reason or "").strip():
+        raise HTTPException(400, "Tulis alasan koreksi.")
+    if not photo:
+        raise HTTPException(400, "Lampirkan screenshot chat yang menunjukkan jam pesan customer dan jam balasan Anda.")
+    cur = c.get("waktuFirstResponse")
+    before = _mins(c["waktuMasuk"], cur) if cur else None
+    after = _mins(c["waktuMasuk"], value)
+    tfrt = c.get("targetFrtMin") or 5
+    req = {"id": new_id(), "kind": kind, "field": "waktuFirstResponse", "value": value, "current": cur,
+           "reason": reason.strip(), "photo": photo, "by": u["name"], "byId": u["id"], "at": now(),
+           "frtBefore": before, "frtAfter": after,
+           "flipsSla": bool(before is not None and before > tfrt >= after)}
+    c["timeRequest"] = req
+    await add_event(c["caseId"], "time_requested", u, {"before": str(cur), "after": str(value), "reason": req["reason"],
+                                                     "frtBefore": before, "frtAfter": after})
+    await notify("time_request",
+                 f"{u['name']} mengajukan jam dibalas {c['caseId']} dimajukan: FRT {before} → {after} mnt"
+                 f"{' (SLA jadi lolos)' if req['flipsSla'] else ''}. Cek screenshot lalu setujui / tolak.",
+                 c["caseId"], roles=LEAD, link="/integritas")
+    return req
+
+
 class RespondIn(BaseModel):
     at: Optional[str] = None
     reason: Optional[str] = None
+    photo: Optional[str] = None
 
 
 @router.post("/cases/{case_id}/respond")
 async def respond(case_id: str, body: RespondIn | None = None, u=Depends(require(*WRITERS))):
-    """Tandai sudah dibalas. `at` = jam balasan sebenarnya bila dicatat belakangan
-    (lebih dari 60 menit ke belakang wajib alasan)."""
+    """Tandai sudah dibalas. `at` = jam balasan sebenarnya bila dicatat belakangan.
+    CS: mundur ≤ frGraceMin langsung diterima; sampai frMaxBackMin perlu persetujuan + screenshot;
+    lebih dari itu ditolak (lewat CRM Supervisor)."""
     c = await get_case_or_404(case_id)
     if c.get("waktuFirstResponse"):
         raise HTTPException(400, "Case ini sudah ditandai dibalas. Pakai 'Ubah waktu dibalas' untuk mengoreksi.")
-    at = parse_iso(body.at) if body and body.at else now()
+    st = (await load_ctx())["settings"]
+    rec = now()
+    at = parse_iso(body.at) if body and body.at else rec
     _check_fr_time(c, at)
-    back_min = (now() - as_utc(at)).total_seconds() / 60
+    back = (rec - as_utc(at)).total_seconds() / 60
     reason = ((body.reason if body else None) or "").strip()
-    if back_min > 60 and not reason:
+    lead = u["role"] in LEAD
+    if back > 2:
+        await check_period_lock(c, u)
+    if not lead and back > st["frMaxBackMin"]:
+        raise HTTPException(400, f"Lebih dari {st['frMaxBackMin']} menit ke belakang. Tekan 'Sudah dibalas' sekarang, "
+                                 f"lalu minta CRM Supervisor mengoreksi jamnya.")
+    if back > 60 and not reason:
         raise HTTPException(400, "Waktu dibalas lebih dari 60 menit yang lalu: tulis alasannya.")
-    c["waktuFirstResponse"] = at
-    if back_min > 2:
-        c["frtManual"] = True
+    c["frRecordedAt"] = rec
+    c["frBy"] = u["name"]
+    pending = (not lead) and back > st["frGraceMin"]
+    if pending:
+        c["waktuFirstResponse"] = rec      # sementara: jam pencatatan, sampai disetujui
+        await _open_request(c, u, at, reason, body.photo if body else None, "respond")
+    else:
+        c["waktuFirstResponse"] = at
+        if back > 2:
+            c["frtManual"] = True
     if c["status"] == "Open":
         c["status"] = "Responded"
     await save_case(c)
-    await add_event(case_id, "responded", u, {"backdatedMin": round(back_min) if back_min > 2 else 0,
-                                               "reason": reason or None})
-    if back_min > 2:
-        await audit(u, f"respond-backdated {case_id}", None, str(at), reason or f"dicatat {round(back_min)} menit setelah membalas")
+    await add_event(case_id, "responded", u, {"backdatedMin": round(back) if back > 2 and not pending else 0,
+                                               "reason": reason or None, "pending": pending})
+    if back > 2 and not pending:
+        await audit(u, f"respond-backdated {case_id}", None, str(at), reason or f"dicatat {round(back)} menit setelah membalas")
+    return out_case(c, u)
+
+
+class DecideIn(BaseModel):
+    note: Optional[str] = None
+
+
+@router.get("/time-requests")
+async def time_requests(u=Depends(require(*LEAD))):
+    ctx = await load_ctx()
+    rows = [out_case(compute_case(c, ctx), u) async for c in
+            get_db().cases.find({"timeRequest": {"$ne": None}, "timeRequest.id": {"$exists": True}})]
+    return sorted(rows, key=lambda c: str(c["timeRequest"]["at"]))
+
+
+@router.post("/cases/{case_id}/time-request/{decision}")
+async def decide_time_request(case_id: str, decision: str, body: DecideIn | None = None, u=Depends(require(*LEAD))):
+    if decision not in ("approve", "reject"):
+        raise HTTPException(404, "Aksi tidak dikenal.")
+    c = await get_case_or_404(case_id)
+    r = c.get("timeRequest")
+    if not r:
+        raise HTTPException(404, "Tidak ada pengajuan yang menunggu.")
+    if r["byId"] == u["id"]:
+        raise HTTPException(403, "Pengajuan sendiri harus disetujui CRM Supervisor / Admin lain.")
+    note = ((body.note if body else None) or "").strip()
+    if decision == "reject" and not note:
+        raise HTTPException(400, "Tulis alasan penolakan.")
+    if decision == "approve":
+        await check_period_lock(c, u)
+        _check_fr_time(c, parse_iso(r["value"]))
+        before = c.get("waktuFirstResponse")
+        c["waktuFirstResponse"] = parse_iso(r["value"])
+        c["frtManual"] = True
+        await audit(u, f"approve-time {case_id}", str(before), str(r["value"]), f"{r['by']}: {r['reason']}")
+    log = c.get("timeRequestLog") or []
+    log.append({**r, "status": "approved" if decision == "approve" else "rejected", "decidedBy": u["name"],
+                "decidedAt": now(), "note": note or None})
+    c["timeRequestLog"] = log
+    c["timeRequest"] = None
+    await save_case(c)
+    await add_event(case_id, "time_approved" if decision == "approve" else "time_rejected", u,
+                    {"after": str(r["value"]), "reason": note or None, "by": r["by"]})
     return out_case(c, u)
 
 
@@ -288,7 +394,8 @@ async def resolve(case_id: str, body: ResolveIn, u=Depends(require(*WRITERS))):
     if not body.rootCause.strip():
         raise HTTPException(400, "Root cause wajib diisi sebelum Resolved.")
     if not c.get("waktuFirstResponse"):
-        c["waktuFirstResponse"] = now()
+        c["waktuFirstResponse"] = c["frRecordedAt"] = now()
+        c["frBy"] = u["name"]
     c.update(rootCause=body.rootCause.strip(), kompensasiKey=k["key"], kompensasiJenis=k["jenis"],
              kompensasiLabel=k["label"], waktuResolved=now(), status="Resolved",
              nilaiKompensasi=body.nilaiKompensasi if body.nilaiKompensasi is not None else k.get("nilai", 0))
@@ -373,17 +480,20 @@ class CorrectIn(BaseModel):
     field: str
     value: Optional[str] = None
     reason: str
+    photo: Optional[str] = None
 
 
 @router.post("/cases/{case_id}/correct-time")
 async def correct_time(case_id: str, body: CorrectIn, u=Depends(require(*WRITERS))):
     if body.field not in ("waktuMasuk", "waktuFirstResponse", "waktuResolved", "waktuClosed"):
         raise HTTPException(400, "Kolom waktu tidak dikenal.")
-    if body.field != "waktuFirstResponse" and u["role"] not in LEAD:
+    lead = u["role"] in LEAD
+    if body.field != "waktuFirstResponse" and not lead:
         raise HTTPException(403, "CS hanya bisa mengubah waktu dibalas. Waktu lain dikoreksi CRM Supervisor.")
     if not body.reason.strip():
         raise HTTPException(400, "Alasan koreksi wajib diisi.")
     c = await get_case_or_404(case_id)
+    await check_period_lock(c, u)
     val = parse_iso(body.value) if body.value else None
     if val and val > now() + timedelta(minutes=2):
         raise HTTPException(400, "Waktu tidak boleh di masa depan.")
@@ -398,23 +508,44 @@ async def correct_time(case_id: str, body: CorrectIn, u=Depends(require(*WRITERS
     if trial.get("waktuClosed") and (not trial.get("waktuResolved") or as_utc(trial["waktuClosed"]) < as_utc(trial["waktuResolved"])):
         raise HTTPException(400, "Waktu Closed tidak boleh sebelum Waktu Resolved.")
     if body.field == "waktuFirstResponse":
-        if not val and u["role"] not in LEAD:
-            raise HTTPException(400, "Isi jam dibalas yang benar.")
         if val and trial.get("waktuResolved") and as_utc(val) > as_utc(trial["waktuResolved"]):
             raise HTTPException(400, "Waktu dibalas tidak boleh setelah waktu Resolved.")
+        if not lead:
+            st = (await load_ctx())["settings"]
+            if not val:
+                raise HTTPException(400, "Isi jam dibalas yang benar.")
+            if not c.get("waktuFirstResponse"):
+                raise HTTPException(400, "Case belum ditandai dibalas. Pakai tombol 'Dibalas jam lain…'.")
+            if c["status"] in ("Resolved", "Closed"):
+                raise HTTPException(403, "Case sudah Resolved: koreksi jam dibalas lewat CRM Supervisor.")
+            if c.get("timeRequest"):
+                raise HTTPException(400, "Masih ada pengajuan jam dibalas yang menunggu persetujuan.")
+            if (c.get("frEditCount") or 0) >= 1:
+                raise HTTPException(403, "Jam dibalas case ini sudah pernah diubah. Koreksi berikutnya lewat CRM Supervisor.")
+            base = c.get("frRecordedAt") or c["waktuFirstResponse"]
+            if now() - as_utc(base) > timedelta(hours=st["frEditHours"]):
+                raise HTTPException(403, f"Lewat {st['frEditHours']} jam sejak dibalas: koreksi lewat CRM Supervisor.")
+            c["frEditCount"] = (c.get("frEditCount") or 0) + 1
+            if as_utc(val) < as_utc(c["waktuFirstResponse"]):
+                # FRT jadi lebih cepat → perlu persetujuan + bukti
+                if (as_utc(base) - as_utc(val)).total_seconds() / 60 > st["frMaxBackMin"]:
+                    raise HTTPException(400, f"Lebih dari {st['frMaxBackMin']} menit sebelum jam pencatatan: minta CRM Supervisor.")
+                await _open_request(c, u, val, body.reason, body.photo, "edit")
+                await save_case(c)
+                return out_case(c, u)
         c["frtManual"] = bool(val)
     before = c.get(body.field)
     c[body.field] = val
     if body.field == "waktuMasuk":
         c["hasTime"] = True
-    st = "Open"
+    st_ = "Open"
     if c.get("waktuFirstResponse"):
-        st = "Responded"
+        st_ = "Responded"
     if c.get("waktuResolved"):
-        st = "Resolved"
+        st_ = "Resolved"
     if c.get("waktuClosed"):
-        st = "Closed"
-    c["status"] = st
+        st_ = "Closed"
+    c["status"] = st_
     await save_case(c)
     await audit(u, f"correct-time {case_id}.{body.field}", str(before), str(val), body.reason)
     await add_event(case_id, "time_corrected", u, {"field": body.field, "before": str(before), "after": str(val),
@@ -487,7 +618,8 @@ async def inbox(u=Depends(current_user)):
     if not can_see_phone(u):
         for x in csat:
             x["phone"] = mask_phone(x.get("phone"))
-    return {**sec, "csatDrafts": csat, "reviewDrafts": reviews}
+    pend = await db.cases.count_documents({"timeRequest.id": {"$exists": True}}) if u["role"] in LEAD else 0
+    return {**sec, "csatDrafts": csat, "reviewDrafts": reviews, "timeRequests": pend}
 
 
 # ------------------------------------------------------------------ dashboard
@@ -771,6 +903,9 @@ async def get_meeting(mid: str, u=Depends(current_user)):
         dash = m["snapshot"]
     else:
         dash = await build_dashboard(m["periodStart"], m["periodEnd"])
+    if "integrity" not in dash:
+        from .routes_integrity import build_integrity
+        dash["integrity"] = await build_integrity(m["periodStart"], m["periodEnd"])
     prev = await db.meetings.find_one({"date": {"$lt": m["date"]}, "locked": True}, sort=[("date", -1)])
     open_actions = [clean(a) async for a in db.voc_actions.find({"status": {"$in": ["Open", "On Progress"]}}).sort("deadline", 1)]
     reviews = await review_summary(m["periodStart"], m["periodEnd"])
@@ -826,6 +961,8 @@ async def lock(mid: str, u=Depends(require(*LEAD))):
     dash = await build_dashboard(m["periodStart"], m["periodEnd"])
     dash["compare"] = {"week": await build_compare("week", 6, m["periodEnd"]),
                        "month": await build_compare("month", 6, m["periodEnd"])}
+    from .routes_integrity import build_integrity
+    dash["integrity"] = await build_integrity(m["periodStart"], m["periodEnd"])
     await db.meetings.update_one({"id": mid}, {"$set": {"locked": True, "snapshot": dash, "lockedAt": now(),
                                                         "lockedBy": u["name"]}})
     return {"ok": True}

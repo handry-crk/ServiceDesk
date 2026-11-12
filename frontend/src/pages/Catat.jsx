@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, useApp, toLocalInput, fromLocalInput, compressImage, WRITERS } from '../lib.jsx'
+import { api, useApp, toLocalInput, fromLocalInput, compressImage, WRITERS, LEAD } from '../lib.jsx'
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge } from '../ui.jsx'
 import { Combo, levelItemBadge } from '../components.jsx'
 
@@ -15,6 +15,7 @@ export default function Catat() {
   const [subJenis, setSubJenis] = useState('')
   const [ringkasan, setRingkasan] = useState('')
   const [waktu, setWaktu] = useState(null) // null = sekarang
+  const [lagReason, setLagReason] = useState('')
   const [more, setMore] = useState(false)
   const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
   const [photos, setPhotos] = useState([])
@@ -42,6 +43,9 @@ export default function Catat() {
   const tfrt = level === 'Critical' ? Math.min(ch?.targetFrt || 5, masters?.criticalFrt || 30) : ch?.targetFrt
   const frozen = outlet?.type === 'online_frozen'
   const cc = !level ? '-' : level === 'Minor' ? (frozen && subJenis === 'Kesalahan Kemasan' ? 'Factory' : 'Operasional') : level === 'Major' ? (frozen ? 'Team Frozen' : 'Operasional') : level === 'Critical' ? ((['Kontaminasi', 'Keracunan', 'Undercooked'].includes(subJenis) || (frozen && subJenis === 'Penurunan Mutu (tidak dapat dikonsumsi)')) ? 'Factory/Operasional (cek root cause)' : 'Operasional') : 'Belum Diatur'
+  const lagMax = masters?.settings?.masukLagReasonMin ?? 30
+  const lagMin = waktu ? Math.round((Date.now() - new Date(fromLocalInput(waktu)).getTime()) / 60000) : 0
+  const needLag = lagMin > lagMax && !can(...LEAD)
   const needBatch = frozen && (masters?.needsBatch || []).includes(subJenis)
   const needQty = frozen && ['Missing Item', 'Wrong Item', 'Cacat Produksi'].includes(subJenis)
   const sla = { Minor: '1 hari', Major: '2 hari', Critical: '3 hari' }[level] || 'belum diatur'
@@ -73,14 +77,14 @@ export default function Catat() {
     try {
       const ex = Object.fromEntries(Object.entries(extra).filter(([k, v]) => v && (frozen || !FROZEN_KEYS.includes(k))))
       for (const k of ['qtyPesan', 'qtyDiterima']) if (ex[k]) ex[k] = Number(ex[k])
-      const body = { channel, outletId, subJenis, ringkasan, waktuMasuk: waktu ? fromLocalInput(waktu) : null, photos, force, ...ex }
+      const body = { channel, outletId, subJenis, ringkasan, waktuMasuk: waktu ? fromLocalInput(waktu) : null, waktuMasukReason: needLag ? lagReason : null, photos, force, ...ex }
       const c = await api('/cases', { method: 'POST', body })
       ls.set('sd_last_channel', channel)
       ls.set('sd_recent_outlets', [outletId, ...recentOutlets.filter((x) => x !== outletId)].slice(0, 5))
       notify(`Tersimpan: ${c.caseId}${c.level === 'Critical' ? ' — CRITICAL, balas < 30 menit' : ''}`, 'ok', {
         label: 'Sudah dibalas', fn: async () => { await api(`/cases/${c.caseId}/respond`, { method: 'POST' }); notify(`${c.caseId} ditandai sudah dibalas`) },
       })
-      setOutletId(''); setSubJenis(''); setRingkasan(''); setWaktu(null); setPhotos([]); setDup(null)
+      setOutletId(''); setSubJenis(''); setRingkasan(''); setWaktu(null); setLagReason(''); setPhotos([]); setDup(null)
       setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
       if (c.level === 'Critical') nav('/case/' + c.caseId)
     } catch (e) {
@@ -91,7 +95,7 @@ export default function Catat() {
 
   const setX = (k, v) => setExtra((x) => ({ ...x, [k]: v }))
   const quick = (min) => setWaktu(toLocalInput(new Date(Date.now() - min * 60000).toISOString()))
-  const ok = channel && outletId && subJenis && ringkasan.trim()
+  const ok = channel && outletId && subJenis && ringkasan.trim() && (!needLag || lagReason.trim())
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -161,7 +165,11 @@ export default function Catat() {
             <Chip onClick={() => quick(15)}>−15 mnt</Chip><Chip onClick={() => quick(60)}>−1 jam</Chip>
             <input type="datetime-local" className={inputCls + ' w-auto !min-h-[40px]'} value={waktu || ''} max={toLocalInput()} onChange={(e) => setWaktu(e.target.value || null)} />
           </div>
+          <div className="text-xs text-mute mt-1">Isi jam pesan customer <b>masuk</b> (lihat di chat), bukan jam Anda mencatat.</div>
         </Field>
+        {needLag && <Field label={`Kenapa baru dicatat ${lagMin} menit setelah masuk?`} required hint="Tercatat di case dan laporan integritas.">
+          <input className={inputCls} value={lagReason} onChange={(e) => setLagReason(e.target.value)} placeholder="Mis. chat masuk di luar jam kerja, baru dibaca pagi" />
+        </Field>}
 
         <button type="button" className="text-sm font-semibold text-brick" onClick={() => setMore(!more)}>{more ? '▾' : '▸'} Detail tambahan (opsional)</button>
         {more && (

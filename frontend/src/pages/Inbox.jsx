@@ -58,6 +58,7 @@ export default function Inbox() {
         {writer && <Link to="/catat"><Btn>+ Catat komplain</Btn></Link>}
       </div>
 
+      {data.timeRequests > 0 && <Link to="/integritas"><div className="mb-4 rounded-xl border-2 border-warn bg-[#FBF1DC] p-3 text-sm font-semibold">{data.timeRequests} pengajuan jam dibalas menunggu persetujuan Anda →</div></Link>}
       <Section title="Belum dibalas" count={data.open.length} tone={data.open.length ? 'bg-brick text-white' : ''}>
         {data.open.length === 0 && <Empty>Semua chat sudah dibalas. 👍</Empty>}
         {data.open.map((c) => <CaseCard key={c.caseId} c={c} now={now}

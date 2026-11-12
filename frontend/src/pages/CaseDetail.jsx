@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { api, useApp, useAsync, fmtDT, fmtMin, fmtRp, toLocalInput, fromLocalInput, WRITERS, LEAD, waNumber, waLink, surveyMessage } from '../lib.jsx'
 import { Btn, Card, Chip, Field, Sheet, Skeleton, ErrorBox, LevelBadge, StatusBadge, inputCls } from '../ui.jsx'
-import { SlaChip, useNow, Combo, levelItemBadge } from '../components.jsx'
+import { SlaChip, useNow, Combo, levelItemBadge, PhotoPick } from '../components.jsx'
 
-const EV = { created: 'Case dibuat', responded: 'Sudah dibalas', resolved: 'Resolved', closed: 'Closed', reopened: 'Dibuka ulang', note: 'Catatan', level_changed: 'Level diubah', time_corrected: 'Waktu dikoreksi', voucher_issued: 'Voucher diterbitkan', edited: 'Data diubah', csat: 'CSAT customer' }
+const EV = { created: 'Case dibuat', responded: 'Sudah dibalas', resolved: 'Resolved', closed: 'Closed', reopened: 'Dibuka ulang', note: 'Catatan', level_changed: 'Level diubah', time_corrected: 'Waktu dikoreksi', time_requested: 'Pengajuan jam dibalas', time_approved: 'Pengajuan disetujui', time_rejected: 'Pengajuan ditolak', audit_checked: 'Audit jam', voucher_issued: 'Voucher diterbitkan', edited: 'Data diubah', csat: 'CSAT customer' }
 const TL = { waktuMasuk: 'Waktu masuk', waktuFirstResponse: 'Waktu dibalas', waktuResolved: 'Resolved', waktuClosed: 'Closed' }
 const CC_ROOT = 'Factory/Operasional (cek root cause)'
 
@@ -14,7 +14,7 @@ export default function CaseDetail() {
   const { id } = useParams()
   const [sp, setSp] = useSearchParams()
   const nav = useNavigate()
-  const { masters, can, notify } = useApp()
+  const { masters, can, notify, user } = useApp()
   const now = useNow()
   const { data: c, loading, error, reload, setData } = useAsync(() => api('/cases/' + id), [id])
   const [sheet, setSheet] = useState(sp.get('aksi') || null)
@@ -47,6 +47,7 @@ export default function CaseDetail() {
         {c.photos?.length > 0 && <div className="flex gap-2 mt-3">{c.photos.map((p) => <a key={p} href={p} target="_blank" rel="noreferrer"><img src={p} className="w-20 h-20 object-cover rounded-xl border border-line" alt="" /></a>)}</div>}
         {crit && c.status === 'Open' && <div className="mt-3 rounded-xl bg-brick text-white p-3 text-sm font-semibold">Critical — balas &lt; 30 menit dan eskalasi ke Manager / Direksi.</div>}
         {c.dataIssues?.length > 0 && <div className="flex flex-wrap gap-1 mt-3">{c.dataIssues.map((i) => <span key={i} className={`text-xs px-2 py-0.5 rounded-md ${i.startsWith('Info:') ? 'bg-cream text-mute' : 'bg-[#FBF1DC] text-[#7A5410]'}`}>{i.replace('Info: ', '')}</span>)}</div>}
+        {c.timeRequest && <TimeRequestBox c={c} lead={lead} me={user} onDecide={(d, note) => act(`time-request/${d}`, { note }, d === 'approve' ? 'Pengajuan disetujui' : 'Pengajuan ditolak')} />}
         {writer && (
           <div className="flex flex-wrap gap-2 mt-4 no-print">
             {!c.waktuFirstResponse && <Btn kind="ok" size="lg" onClick={() => act('respond', undefined, 'Ditandai sudah dibalas')}>Sudah dibalas</Btn>}
@@ -57,7 +58,7 @@ export default function CaseDetail() {
             <Btn kind="ghost" onClick={() => setSheet('note')}>Tambah catatan</Btn>
             <Btn kind="ghost" onClick={() => setSheet('level')}>Ubah level</Btn>
             <Btn kind="ghost" onClick={() => setSheet('edit')}>Ubah data</Btn>
-            {c.waktuFirstResponse && !lead && <Btn kind="ghost" onClick={() => setSheet('fr')}>Ubah waktu dibalas</Btn>}
+            {c.waktuFirstResponse && !lead && !c.timeRequest && !(c.frEditCount >= 1) && ['Open', 'Responded'].includes(c.status) && <Btn kind="ghost" onClick={() => setSheet('fr')}>Ubah waktu dibalas</Btn>}
             {lead && <Btn kind="ghost" onClick={() => setSheet('time')}>Koreksi waktu</Btn>}
           </div>
         )}
@@ -81,6 +82,8 @@ export default function CaseDetail() {
           <Row k="First response" v={<span>{fmtDT(c.waktuFirstResponse)}{c.frtManual && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-cream text-mute font-semibold" title="Jam dibalas diisi manual oleh CS">dicatat manual</span>}</span>} /><Row k="Resolved" v={fmtDT(c.waktuResolved)} /><Row k="Closed" v={fmtDT(c.waktuClosed)} />
           <Row k="FRT" v={<span className={c.slaResponseOk === false ? 'text-brick' : c.slaResponseOk ? 'text-ok' : ''}>{fmtMin(c.frtMin)} / target {c.targetFrtMin} mnt</span>} />
           <Row k="FRT jam kerja" v={fmtMin(c.frtWorkMin)} />
+          {c.frtSystemMin != null && c.frtSystemMin !== c.frtMin && <Row k="FRT sistem (jam tombol ditekan)" v={<span className={c.slaRescued ? 'text-brick' : ''}>{fmtMin(c.frtSystemMin)}{c.slaRescued ? ' · SLA lolos karena jam manual' : ''}</span>} />}
+          {c.masukLagMin > (masters?.settings?.masukLagReasonMin ?? 30) && <Row k="Dicatat setelah masuk" v={<span>{fmtMin(c.masukLagMin)}{c.waktuMasukReason ? ` · ${c.waktuMasukReason}` : ''}</span>} />}
           <Row k="Resolusi" v={<span className={c.resolutionSlaOk === false ? 'text-brick' : c.resolutionSlaOk ? 'text-ok' : ''}>{fmtMin(c.resolutionMin)}{c.targetResolutionMin ? ` / target ${fmtMin(c.targetResolutionMin)}` : ''}</span>} />
           <Row k="Same day" v={c.sameDay === null ? '–' : c.sameDay ? 'Ya' : 'Tidak'} /><Row k="Follow-up ulang" v={c.followUpUlang} />
           <Row k="Dibuka ulang" v={c.reopenCount ? `${c.reopenCount}×` : 'Tidak'} /><Row k="CSAT" v={c.csat ? `${c.csat}/5` : '–'} />
@@ -117,6 +120,10 @@ export default function CaseDetail() {
                 {e.type === 'level_changed' && <div className="text-mute">{e.payload.from} → {e.payload.to}</div>}
                 {e.type === 'time_corrected' && <div className="text-mute">{TL[e.payload.field] || e.payload.field}: {fmtDT(e.payload.before)} → {fmtDT(e.payload.after)}</div>}
                 {e.type === 'responded' && e.payload?.backdatedMin > 0 && <div className="text-mute">Dicatat {fmtMin(e.payload.backdatedMin)} setelah membalas</div>}
+                {e.type === 'responded' && e.payload?.pending && <div className="text-mute">Jam dibalas sebenarnya diajukan, menunggu persetujuan</div>}
+                {e.type === 'time_requested' && <div className="text-mute">FRT {fmtMin(e.payload.frtBefore)} → {fmtMin(e.payload.frtAfter)}</div>}
+                {['time_approved', 'time_rejected'].includes(e.type) && <div className="text-mute">Pengajuan {e.payload.by}</div>}
+                {e.type === 'audit_checked' && <div className={e.payload.result === 'tidak' ? 'text-brick' : 'text-ok'}>{e.payload.result === 'tidak' ? 'Tidak cocok dengan chat' : 'Cocok dengan chat'}</div>}
               </li>
             ))}
             {c.events.length === 0 && <li className="text-sm text-mute">Data impor dari sheet lama.</li>}
@@ -143,9 +150,9 @@ export default function CaseDetail() {
       <SimpleSheet open={sheet === 'note'} onClose={close} title="Tambah catatan" label="Catatan" onDone={(t) => act('note', { text: t }, 'Catatan tersimpan')} />
       <LevelSheet open={sheet === 'level'} onClose={close} c={c} onDone={(b) => act('change-level', b, 'Level diubah')} />
       <RespondSheet open={sheet === 'respond'} onClose={close} c={c} title="Sudah dibalas — jam lain"
-        onDone={({ at, reason }) => act('respond', { at, reason }, 'Ditandai sudah dibalas')} />
+        onDone={({ at, reason, photo }) => act('respond', { at, reason, photo }, 'Tersimpan')} />
       <RespondSheet open={sheet === 'fr'} onClose={close} c={c} title="Ubah waktu dibalas" edit
-        onDone={({ at, reason }) => act('correct-time', { field: 'waktuFirstResponse', value: at, reason }, 'Waktu dibalas diubah')} />
+        onDone={({ at, reason, photo }) => act('correct-time', { field: 'waktuFirstResponse', value: at, reason, photo }, 'Tersimpan')} />
       <TimeSheet open={sheet === 'time'} onClose={close} c={c} onDone={(b) => act('correct-time', b, 'Waktu dikoreksi')} />
       <EditSheet open={sheet === 'edit' || sheet === 'rootcause'} limited={sheet === 'rootcause' || limited} onClose={close} c={c} masters={masters}
         onDone={async (b) => { try { setData(await api('/cases/' + id, { method: 'PATCH', body: b })); notify('Tersimpan'); close(); reload() } catch (e) { notify(e.message, 'err') } }} />
@@ -272,32 +279,66 @@ function LevelSheet({ open, onClose, c, onDone }) {
   )
 }
 
+export function TimeRequestBox({ c, lead, me, onDecide }) {
+  const r = c.timeRequest
+  const [note, setNote] = useState('')
+  const own = r.byId === me?.id
+  return (
+    <div className="mt-3 rounded-xl border-2 border-warn bg-[#FBF1DC] p-3 text-sm space-y-2">
+      <div className="font-bold">Menunggu persetujuan: jam dibalas diajukan {fmtDT(r.value)}</div>
+      <div>Oleh {r.by} · {fmtDT(r.at)} · FRT {fmtMin(r.frtBefore)} → <b>{fmtMin(r.frtAfter)}</b>{r.flipsSla && <span className="ml-1 text-brick font-semibold">(SLA jadi lolos)</span>}</div>
+      <div>Alasan: {r.reason}</div>
+      {r.photo && <a href={r.photo} target="_blank" rel="noreferrer"><img src={r.photo} className="max-h-48 rounded-lg border border-line" alt="screenshot chat" /></a>}
+      <div className="text-xs text-mute">Sampai disetujui, dashboard memakai jam saat tombol ditekan ({fmtDT(c.waktuFirstResponse)}).</div>
+      {lead && !own && <div className="flex flex-wrap gap-2 items-center pt-1">
+        <Btn kind="ok" size="sm" onClick={() => onDecide('approve', note)}>Setujui — jam di screenshot cocok</Btn>
+        <input className={inputCls + ' !min-h-[36px] flex-1 min-w-[160px]'} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Alasan tolak (wajib bila tolak)" />
+        <Btn kind="ghost" size="sm" disabled={!note.trim()} onClick={() => onDecide('reject', note)}>Tolak</Btn>
+      </div>}
+      {lead && own && <div className="text-xs text-mute">Pengajuan Anda sendiri — disetujui CRM Supervisor / Admin lain.</div>}
+    </div>
+  )
+}
+
 function RespondSheet({ open, onClose, c, onDone, title, edit }) {
+  const { masters, can } = useApp()
+  const st = masters?.settings || {}
+  const lead = can(...LEAD)
+  const grace = st.frGraceMin ?? 15, maxBack = st.frMaxBackMin ?? 120
   const [v, setV] = useState('')
   const [r, setR] = useState('')
-  useEffect(() => { if (open) { setV(toLocalInput(edit && c.waktuFirstResponse ? c.waktuFirstResponse : undefined)); setR('') } }, [open])
+  const [photo, setPhoto] = useState(null)
+  useEffect(() => { if (open) { setV(toLocalInput(edit && c.waktuFirstResponse ? c.waktuFirstResponse : undefined)); setR(''); setPhoto(null) } }, [open])
   const masuk = toLocalInput(c.waktuMasuk)
   const at = v ? new Date(fromLocalInput(v)) : null
-  const back = at ? (Date.now() - at.getTime()) / 60000 : 0
+  const base = edit ? new Date(c.frRecordedAt || c.waktuFirstResponse) : new Date()
+  const back = at ? (base.getTime() - at.getTime()) / 60000 : 0
   const frt = at ? Math.round((at - new Date(c.waktuMasuk)) / 60000) : null
-  const errMsg = !v ? 'Isi jam dibalas.' : v < masuk ? 'Tidak boleh sebelum waktu masuk.' : back < -2 ? 'Tidak boleh di masa depan.'
-    : c.waktuResolved && at > new Date(c.waktuResolved) ? 'Tidak boleh setelah waktu Resolved.' : null
-  const needReason = edit || back > 60
+  const faster = edit ? at && at < new Date(c.waktuFirstResponse) : back > 2
+  const errMsg = !v ? 'Isi jam dibalas.' : v < masuk ? 'Tidak boleh sebelum waktu masuk.' : (Date.now() - at.getTime()) < -120000 ? 'Tidak boleh di masa depan.'
+    : c.waktuResolved && at > new Date(c.waktuResolved) ? 'Tidak boleh setelah waktu Resolved.'
+    : !lead && back > maxBack ? `Lebih dari ${maxBack} menit ke belakang — ${edit ? 'minta' : 'tekan Sudah dibalas sekarang, lalu minta'} CRM Supervisor mengoreksi.` : null
+  const needApproval = !lead && (edit ? faster : back > grace)
+  const needReason = edit || back > 60 || needApproval
   const quick = (min) => setV(toLocalInput(new Date(Date.now() - min * 60000).toISOString()))
   return (
     <Sheet open={open} onClose={onClose} title={title}>
       <div className="space-y-4">
-        <p className="text-sm text-mute">{edit ? 'Pakai bila jam balasan pertama ke customer tercatat salah.' : 'Pakai bila Anda sudah membalas customer lebih dulu dan baru mencatatnya sekarang.'} Isi jam <b>balasan pertama</b> yang sebenarnya — lihat di chat.</p>
+        <p className="text-sm text-mute">{edit ? 'Pakai bila jam balasan pertama tercatat salah. CS hanya bisa mengubah sekali per case.' : 'Pakai bila Anda sudah membalas customer lebih dulu dan baru mencatatnya sekarang.'} Isi jam <b>balasan pertama</b> yang sebenarnya — lihat di chat.</p>
         <div className="text-sm">Masuk: <b>{fmtDT(c.waktuMasuk)}</b>{c.waktuFirstResponse && edit && <> · tercatat dibalas: <b>{fmtDT(c.waktuFirstResponse)}</b></>}</div>
         {!edit && <div className="flex flex-wrap gap-2">{[[5, '5 mnt lalu'], [15, '15 mnt lalu'], [30, '30 mnt lalu'], [60, '1 jam lalu']]
           .filter(([m]) => Date.now() - m * 60000 >= new Date(c.waktuMasuk).getTime()).map(([m, l]) => <Chip key={m} onClick={() => quick(m)}>{l}</Chip>)}</div>}
         <Field label="Jam dibalas" required><input type="datetime-local" className={inputCls} value={v} min={masuk} max={toLocalInput()} onChange={(e) => setV(e.target.value)} /></Field>
         {v && !errMsg && <div className="text-sm bg-cream rounded-xl p-3">FRT jadi <b>{fmtMin(frt)}</b> (target {c.targetFrtMin} mnt) — {frt <= c.targetFrtMin ? <span className="text-ok font-semibold">sesuai SLA</span> : <span className="text-brick font-semibold">lewat SLA</span>}</div>}
         {v && errMsg && <div className="text-sm text-brick">{errMsg}</div>}
-        {needReason && <Field label="Alasan" required hint={edit ? 'Tercatat di riwayat case & audit log.' : 'Wajib karena lebih dari 60 menit yang lalu. Tercatat di audit log.'}>
+        {v && !errMsg && needApproval && <div className="text-sm rounded-xl border border-warn bg-[#FBF1DC] p-3">
+          <b>Perlu persetujuan CRM Supervisor.</b> {edit ? 'Jam dibalas jadi lebih awal.' : `Lebih dari ${grace} menit ke belakang.`} Lampirkan screenshot chat yang memperlihatkan jam pesan customer dan jam balasan Anda. {!edit && 'Sampai disetujui, yang tercatat adalah jam sekarang.'}
+        </div>}
+        {needReason && <Field label="Alasan" required hint="Tercatat di riwayat case & audit log.">
           <input className={inputCls} value={r} onChange={(e) => setR(e.target.value)} placeholder={edit ? 'Mis. salah pilih jam' : 'Mis. balas dari HP, baru sempat input'} />
         </Field>}
-        <Btn className="w-full" size="lg" disabled={!!errMsg || (needReason && !r.trim())} onClick={() => onDone({ at: fromLocalInput(v), reason: r.trim() || null })}>Simpan</Btn>
+        {needApproval && !errMsg && v && <Field label="Screenshot chat" required><PhotoPick value={photo} onChange={setPhoto} /></Field>}
+        <Btn className="w-full" size="lg" disabled={!!errMsg || (needReason && !r.trim()) || (needApproval && !photo)} onClick={() => onDone({ at: fromLocalInput(v), reason: r.trim() || null, photo })}>{needApproval ? 'Ajukan ke CRM Supervisor' : 'Simpan'}</Btn>
       </div>
     </Sheet>
   )

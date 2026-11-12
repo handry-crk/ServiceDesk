@@ -209,6 +209,13 @@ SETTINGS = {
     "alertCriticalAfterMin": 20,
     "emailRecipients": [],
     "appName": "CRK Service Desk",
+    # integritas waktu (anti mundur-jam)
+    "frGraceMin": 15,           # mundur ≤ N menit langsung diterima (tetap bertanda manual)
+    "frMaxBackMin": 120,        # CS maksimal mundurkan jam dibalas N menit; lebih → CRM Supervisor
+    "frEditHours": 24,          # CS hanya bisa ubah jam dibalas dalam N jam, sekali per case
+    "masukLagReasonMin": 30,    # waktu masuk > N menit sebelum dicatat → wajib alasan
+    "manualAlertPct": 0.15,     # notifikasi bila % jam manual seorang CS di atas ini (7 hari)
+    "auditSamplePerCs": 5,      # audit acak mingguan per CS
 }
 
 VOUCHER_JENIS = ["Voucher Diskon 5K", "Voucher Diskon 10K", "Free Produk Porsi Besar", "Free Produk Porsi Kecil"]

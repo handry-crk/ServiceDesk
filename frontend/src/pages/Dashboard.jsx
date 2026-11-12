@@ -30,7 +30,7 @@ export const ChartCard = ({ title, insight, children, info, className = '' }) =>
 
 export function Headline({ d }) {
   const tiles = [
-    { k: 'frt', label: 'FRT rata-rata', v: d.metrics.frt === null ? '–' : `${fmtNum(d.metrics.frt)} mnt`, sub: `Jam kerja: ${d.metrics.frtWork === null ? '–' : fmtNum(d.metrics.frtWork) + ' mnt'}` },
+    { k: 'frt', label: 'FRT rata-rata', v: d.metrics.frt === null ? '–' : `${fmtNum(d.metrics.frt)} mnt`, sub: `Jam kerja: ${d.metrics.frtWork === null ? '–' : fmtNum(d.metrics.frtWork) + ' mnt'}${d.metrics.frtSystem != null ? ` · sistem: ${fmtNum(d.metrics.frtSystem)} mnt` : ''}${d.metrics.manualPct ? ` · ${fmtPct(d.metrics.manualPct)} jam manual` : ''}` },
     { k: 'slaResponse', label: '% SLA Response', v: fmtPct(d.metrics.slaResponse) },
     { k: 'sameDay', label: '% Same-Day Resolution', v: fmtPct(d.metrics.sameDay) },
     { k: 'csat', label: 'CSAT komplain (% puas)', v: fmtPct(d.metrics.csat),

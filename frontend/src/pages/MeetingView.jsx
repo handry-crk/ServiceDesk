@@ -4,6 +4,7 @@ import { api, useApp, useAsync, fmtD, fmtPct, fmtNum, fmtRp, todayWIB, WRITERS, 
 import { Btn, ErrorBox, Skeleton, LevelBadge, inputCls } from '../ui.jsx'
 import { Headline, MetricsTable, LevelTable, HBar, HourChart, Weekly } from './Dashboard.jsx'
 import Compare from './Compare.jsx'
+import { IntegrityBody } from './Integritas.jsx'
 
 const STATUSES = ['Open', 'On Progress', 'Done', 'Dropped']
 const ST_CLS = { Open: 'bg-brick-soft text-brick', 'On Progress': 'bg-[#F6E6C6] text-[#7A5410]', Done: 'bg-[#DCEBDD] text-ok', Dropped: 'bg-[#E9E5DF] text-mute' }
@@ -90,7 +91,7 @@ export default function MeetingView() {
     ]
     navigator.clipboard.writeText(lines.join('\n')).then(() => notify('Ringkasan WA tersalin'))
   }
-  const SLIDES = ['Headline & service metrics', 'Komplain per level & tren', 'Komparasi week by week & month by month', 'Voice of Customer — Top 5', 'Action tracker', 'Insight untuk management', 'Review online & CSAT outlet', 'Kualitas data & keputusan']
+  const SLIDES = ['Headline & service metrics', 'Komplain per level & tren', 'Komparasi week by week & month by month', 'Voice of Customer — Top 5', 'Action tracker', 'Insight untuk management', 'Review online & CSAT outlet', 'Integritas waktu', 'Kualitas data & keputusan']
 
   return (
     <div className="bg-cream min-h-screen">
@@ -216,6 +217,9 @@ export default function MeetingView() {
           </div>
         </Slide>
         <Slide n={7} title={SLIDES[7]} refs={refs}>
+          {d.integrity ? <IntegrityBody d={d.integrity} compact /> : <div className="text-mute">Belum ada data integritas.</div>}
+        </Slide>
+        <Slide n={8} title={SLIDES[8]} refs={refs}>
           <div className="text-lg">{d.volume.dataIssues === 0 ? '✓ Semua case periode ini lolos Cek Data.' : <>⚠ <b>{d.volume.dataIssues}</b> case perlu dicek sebelum angka dipakai. <Link className="text-brick underline no-print" to={`/case?dataIssue=true&from=${d.period.from}&to=${d.period.to}`}>Lihat daftar</Link></>}</div>
           <div className="mt-4 text-lg">Kompensasi di luar CRM.STD.001: <b>{d.volume.countLuarStandard}</b> case, {fmtRp(d.volume.biayaLuarStandard)}.</div>
           {d.insights.kompensasi && <p className="text-mute mt-1">{d.insights.kompensasi}</p>}

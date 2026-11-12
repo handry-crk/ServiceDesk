@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fmtDT, fmtMin, api, useApp, compressImage } from './lib.jsx'
+import { fmtDT, fmtMin, fmtD, api, useApp, compressImage } from './lib.jsx'
 import { LevelBadge, StatusBadge, inputCls, Btn } from './ui.jsx'
 
 export function useNow(ms = 30000) {
@@ -110,6 +110,46 @@ export function PhotoPick({ value, onChange, label = 'Upload screenshot' }) {
       {value && <a href={value} target="_blank" rel="noreferrer"><img src={value} className="w-16 h-16 object-cover rounded-lg border border-line" alt="bukti" /></a>}
       <Btn kind="ghost" size="sm" type="button" disabled={busy} onClick={() => ref.current.click()}>{busy ? 'Mengunggah…' : value ? 'Ganti screenshot' : label}</Btn>
       <input ref={ref} type="file" accept="image/*" hidden onChange={(e) => pick(e.target.files[0])} />
+    </div>
+  )
+}
+
+export function KodeLookup({ onDone }) {
+  const { notify, masters } = useApp()
+  const [kode, setKode] = useState('')
+  const [v, setV] = useState(null)
+  const [err, setErr] = useState(null)
+  const [outlet, setOutlet] = useState('')
+  const cek = async () => {
+    setErr(null); setV(null)
+    try { const r = await api('/vouchers/lookup/' + encodeURIComponent(kode.trim().toUpperCase())); setV(r); setOutlet(r.case?.outletName || '') }
+    catch (e) { setErr(e.message) }
+  }
+  const pakai = async () => {
+    try { await api(`/vouchers/${v.kode}/status`, { method: 'POST', body: { status: 'Terpakai', outlet } }); notify(`${v.kode} ditandai terpakai / diterima`); setV(null); setKode(''); onDone?.() }
+    catch (e) { notify(e.message, 'err') }
+  }
+  const expired = v?.kadaluarsa && v.kadaluarsa < new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10)
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <input className={inputCls + ' font-mono uppercase'} value={kode} onChange={(e) => setKode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && kode.trim() && cek()} placeholder="Ketik kode, mis. CMP-RP-2611-0007" />
+        <Btn onClick={cek} disabled={!kode.trim()}>Cek</Btn>
+      </div>
+      {err && <div className="text-sm text-brick">{err}</div>}
+      {v && <div className="rounded-xl border border-line p-3 text-sm space-y-1">
+        <div className="flex flex-wrap items-center gap-2"><span className="font-mono font-bold text-base">{v.kode}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-md font-semibold ${v.status === 'Diterbitkan' ? 'bg-[#FBF1DC] text-[#7A5410]' : v.status === 'Terpakai' ? 'bg-[#E3F1E6] text-[#1F6B3A]' : 'bg-[#F3E1DF] text-brick'}`}>{v.status === 'Diterbitkan' ? 'Belum dipakai' : v.status}</span></div>
+        <div><b>{v.label || v.jenis}</b>{v.nilai ? ` · Rp${Number(v.nilai).toLocaleString('id-ID')}` : ''}</div>
+        {v.case && <div className="text-mute">Case <Link className="underline" to={'/case/' + v.case.caseId}>{v.case.caseId}</Link> · {v.case.outletName} · {v.case.subJenis}{v.case.customerName ? ` · ${v.case.customerName}` : ''}</div>}
+        <div className="text-mute">Diterbitkan {fmtDT(v.tanggalDiterbitkan)} · {v.kadaluarsa ? <span className={expired ? 'text-brick font-semibold' : ''}>berlaku s/d {fmtD(v.kadaluarsa)}{expired ? ' (sudah lewat)' : ''}</span> : 'tanpa batas waktu'}</div>
+        {v.status === 'Terpakai' && <div>Dipakai {fmtDT(v.tanggalDipakai)}{v.outletPemakaian ? ` di ${v.outletPemakaian}` : ''}{v.dipakaiOleh ? ` · dicatat ${v.dipakaiOleh}` : ''}</div>}
+        {v.status === 'Diterbitkan' && !expired && <div className="flex flex-wrap gap-2 items-center pt-2">
+          <select className={inputCls + ' !min-h-[40px] w-auto max-w-[220px]'} value={outlet} onChange={(e) => setOutlet(e.target.value)}>
+            <option value="">Outlet pemakaian…</option>{(masters?.outlets || []).map((o) => <option key={o.id}>{o.name}</option>)}</select>
+          <Btn kind="ok" onClick={pakai}>Tandai terpakai / sudah diterima</Btn>
+        </div>}
+      </div>}
     </div>
   )
 }

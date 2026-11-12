@@ -214,6 +214,45 @@ def survey_token():
     return secrets.token_urlsafe(10)
 
 
+CODE_PREFIX = {"Voucher": "VC", "Replacement": "RP", "Complimentary": "KT", "Refund": "RF", "Cover Pengobatan": "MD"}
+NO_CODE = ("Apologize", "Tidak Ada")
+NO_EXPIRY = ("Refund", "Cover Pengobatan")
+
+
+async def make_tracking_code(kategori):
+    """Kode unik complimentary: CMP-<jenis>-<YYMM>-<nomor>, mis. CMP-RP-2611-0007."""
+    from .core import wib
+    db = get_db()
+    ym = wib(now()).strftime("%y%m")
+    pre = f"CMP-{CODE_PREFIX.get(kategori, 'CM')}-{ym}-"
+    n = await db.vouchers.count_documents({"kode": {"$regex": "^" + pre}})
+    while True:
+        n += 1
+        kode = f"{pre}{n:04d}"
+        if not await db.vouchers.find_one({"kode": kode}):
+            return kode
+
+
+async def issue_complimentary(k, c):
+    """Setiap complimentary (selain Apologize / Tidak Ada) mendapat kode untuk dilacak sampai dipakai/diterima.
+    Voucher diskon memakai stok kode; bila stok habis atau bukan voucher → kode CMP otomatis."""
+    if k["jenis"] in NO_CODE:
+        return None, False
+    db = get_db()
+    if k.get("voucherJenis"):
+        v = await issue_voucher(k["voucherJenis"], c["caseId"])
+        if v:
+            await db.vouchers.update_one({"kode": v["kode"]}, {"$set": {"kategori": "Voucher", "label": k["label"],
+                                                                       "nilai": c.get("nilaiKompensasi") or k.get("nilai", 0)}})
+            return v, False
+    v = {"kode": await make_tracking_code(k["jenis"]), "jenis": k.get("voucherJenis") or k["label"], "label": k["label"],
+         "kategori": k["jenis"], "status": "Diterbitkan", "caseId": c["caseId"], "tanggalDiterbitkan": now(),
+         "nilai": c.get("nilaiKompensasi") or k.get("nilai", 0), "auto": True, "noExpiry": k["jenis"] in NO_EXPIRY,
+         "outletCase": c.get("outletName"), "order": 10 ** 7 + await db.vouchers.count_documents({})}
+    await db.vouchers.insert_one(dict(v))
+    return v, bool(k.get("voucherJenis"))
+
+
 async def issue_voucher(jenis, case_id):
     db = get_db()
     v = await db.vouchers.find_one({"jenis": jenis, "status": "Tersedia"}, sort=[("order", 1)])

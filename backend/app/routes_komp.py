@@ -35,9 +35,9 @@ async def build_komp(frm, to, u=None, brand=None, area=None, line=None):
     for c in given:
         v = vouchers.get(c["caseId"]) or {}
         issued = v.get("tanggalDiterbitkan")
-        exp = (wib_date(issued) + timedelta(days=exp_days)) if issued else None
+        exp = (wib_date(issued) + timedelta(days=exp_days)) if (issued and not v.get("noExpiry")) else None
         used = v.get("tanggalDipakai")
-        st = v.get("status") if v else ("Tanpa voucher" if not c.get("voucherCode") else "Tidak ditemukan")
+        st = v.get("status") if v else ("Tanpa kode" if not c.get("voucherCode") else "Tidak ditemukan")
         rows.append({
             "caseId": c["caseId"], "tanggal": c.get("tanggalMasuk"), "outlet": c.get("outletName"), "area": c.get("area"),
             "brand": c.get("brand"), "subJenis": c.get("subJenis"), "level": c.get("level") or "Belum Diatur",
@@ -45,7 +45,8 @@ async def build_komp(frm, to, u=None, brand=None, area=None, line=None):
             "nilai": c.get("nilaiKompensasi") or 0, "luarStandard": bool(c.get("kompensasiOutsideStandard")),
             "costCenter": c.get("costCenterFinal") or c.get("costCenter"), "status": st, "kode": v.get("kode") or c.get("voucherCode"),
             "voucherJenis": v.get("jenis"), "diterbitkan": issued, "kadaluarsa": exp.isoformat() if exp else None,
-            "dipakai": used, "outletPemakaian": v.get("outletPemakaian"),
+            "dipakai": used, "outletPemakaian": v.get("outletPemakaian"), "dipakaiOleh": v.get("dipakaiOleh"),
+            "auto": bool(v.get("auto")), "noExpiry": bool(v.get("noExpiry")),
             "hariSampaiDipakai": (wib_date(used) - wib_date(issued)).days if (used and issued) else None,
             "sisaHari": (exp - today).days if (exp and st == "Diterbitkan") else None,
             "caseStatus": c.get("status"),
@@ -73,6 +74,7 @@ async def build_komp(frm, to, u=None, brand=None, area=None, line=None):
         "avgHariDipakai": _avg([r["hariSampaiDipakai"] for r in vr]),
         "nilaiAktif": sum(r["nilai"] for r in aktif),
         "segeraHangus": sum(1 for r in aktif if r["sisaHari"] is not None and r["sisaHari"] <= 7),
+        "tanpaKode": sum(1 for r in rows if not r["kode"] and r["jenis"] != "Apologize"),
         "komplainTotal": sum(1 for c in cases if c.get("tipe", "Komplain") == "Komplain"),
     }
     summary["komplainDiberi"] = sum(1 for c in given if c.get("tipe", "Komplain") == "Komplain")

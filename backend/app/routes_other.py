@@ -528,15 +528,38 @@ async def import_vouchers(body: dict, u=Depends(require(*LEAD))):
     return {"added": added, "skipped": len(codes) - added}
 
 
+@router.get("/vouchers/lookup/{kode}")
+async def voucher_lookup(kode: str, u=Depends(require(*WRITERS, "Manager Area", "Ops/QC"))):
+    """Cek kode complimentary saat customer datang ke outlet / saat refund diproses."""
+    db = get_db()
+    v = await db.vouchers.find_one({"kode": kode.strip().upper()})
+    if not v:
+        raise HTTPException(404, "Kode tidak ditemukan. Periksa lagi hurufnya.")
+    c = await db.cases.find_one({"caseId": v.get("caseId")}) if v.get("caseId") else None
+    st = (await db.config.find_one({"_id": "settings"}) or {}).get("value", {})
+    exp = None
+    if v.get("tanggalDiterbitkan") and not v.get("noExpiry"):
+        exp = (wib_date(v["tanggalDiterbitkan"]) + timedelta(days=st.get("voucherExpiryDays", 30))).isoformat()
+    return {**clean(v), "kadaluarsa": exp,
+            "case": {k: c.get(k) for k in ("caseId", "outletName", "subJenis", "level", "kompensasiLabel", "customerName", "status")} if c else None}
+
+
 @router.post("/vouchers/{kode}/status")
-async def voucher_status(kode: str, body: dict, u=Depends(require(*WRITERS))):
+async def voucher_status(kode: str, body: dict, u=Depends(require(*WRITERS, "Manager Area", "Ops/QC"))):
     st = body.get("status")
+    if u["role"] in ("Manager Area", "Ops/QC") and st != "Terpakai":
+        raise HTTPException(403, "Peran Anda hanya bisa menandai kode terpakai / diterima.")
+    v0 = await get_db().vouchers.find_one({"kode": kode})
+    if not v0:
+        raise HTTPException(404, "Kode tidak ditemukan.")
+    if st == "Terpakai" and v0.get("status") in ("Terpakai", "Hangus") and u["role"] not in ("Admin", "CS Lead"):
+        raise HTTPException(400, f"Kode ini sudah {v0['status'].lower()}.")
     if st not in ("Tersedia", "Diterbitkan", "Terpakai", "Hangus"):
         raise HTTPException(400, "Status tidak dikenal.")
     upd = {"status": st}
     if st == "Terpakai":
         upd.update(tanggalDipakai=parse_iso(body["tanggal"]) if body.get("tanggal") else now(),
-                   outletPemakaian=body.get("outlet"))
+                   outletPemakaian=body.get("outlet"), dipakaiOleh=u["name"])
     if body.get("catatan") is not None:
         upd["catatan"] = body["catatan"]
     await get_db().vouchers.update_one({"kode": kode}, {"$set": upd})

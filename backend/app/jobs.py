@@ -117,7 +117,7 @@ async def voucher_expiry():
     st = (await db.config.find_one({"_id": "settings"}) or {}).get("value", {})
     days = st.get("voucherExpiryDays", 30)
     cutoff = now() - timedelta(days=days)
-    async for v in db.vouchers.find({"status": "Diterbitkan"}):
+    async for v in db.vouchers.find({"status": "Diterbitkan", "noExpiry": {"$ne": True}}):
         if v.get("tanggalDiterbitkan") and as_utc(v["tanggalDiterbitkan"]) < cutoff:
             await db.vouchers.update_one({"kode": v["kode"]}, {"$set": {"status": "Hangus"}})
     stock = {}

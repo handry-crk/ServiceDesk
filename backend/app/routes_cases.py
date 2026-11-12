@@ -9,7 +9,7 @@ from .core import get_db, now, parse_iso, as_utc, clean, mask_phone, wib_date, C
 from . import standards as S
 from .logic import compute_case, load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights, by_member, level_breakdown
 from .services import (next_case_id, save_case, add_event, audit, find_duplicates, get_case_or_404,
-                       survey_token, issue_voucher, new_id)
+                       survey_token, issue_voucher, issue_complimentary, new_id)
 
 router = APIRouter(prefix="/api")
 
@@ -401,9 +401,9 @@ async def resolve(case_id: str, body: ResolveIn, u=Depends(require(*WRITERS))):
              nilaiKompensasi=body.nilaiKompensasi if body.nilaiKompensasi is not None else k.get("nilai", 0))
     if body.picDept:
         c["picDept"] = body.picDept
-    voucher = None
-    if k.get("voucherJenis") and not c.get("voucherCode"):
-        voucher = await issue_voucher(k["voucherJenis"], case_id)
+    voucher, stock_empty = None, False
+    if not c.get("voucherCode"):
+        voucher, stock_empty = await issue_complimentary(k, c)
         if voucher:
             c["voucherCode"] = voucher["kode"]
             await add_event(case_id, "voucher_issued", u, {"kode": voucher["kode"]})
@@ -411,8 +411,8 @@ async def resolve(case_id: str, body: ResolveIn, u=Depends(require(*WRITERS))):
     await add_event(case_id, "resolved", u, {"kompensasi": k["label"], "nilai": c["nilaiKompensasi"]})
     d = out_case(c, u)
     d["voucher"] = clean(voucher)
-    d["voucherWarning"] = (None if (voucher or not k.get("voucherJenis") or c.get("voucherCode"))
-                           else f"Stok {k['voucherJenis']} habis. Tambah kode di menu Voucher.")
+    d["voucherWarning"] = (f"Stok {k['voucherJenis']} habis: dipakai kode otomatis {voucher['kode']}. "
+                           f"Tambah stok di menu Voucher.") if stock_empty else None
     return d
 
 

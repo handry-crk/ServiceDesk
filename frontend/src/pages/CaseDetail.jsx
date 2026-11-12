@@ -4,7 +4,7 @@ import { api, useApp, useAsync, fmtDT, fmtMin, fmtRp, toLocalInput, fromLocalInp
 import { Btn, Card, Chip, Field, Sheet, Skeleton, ErrorBox, LevelBadge, StatusBadge, inputCls } from '../ui.jsx'
 import { SlaChip, useNow, Combo, levelItemBadge, PhotoPick } from '../components.jsx'
 
-const EV = { created: 'Case dibuat', responded: 'Sudah dibalas', resolved: 'Resolved', closed: 'Closed', reopened: 'Dibuka ulang', note: 'Catatan', level_changed: 'Level diubah', time_corrected: 'Waktu dikoreksi', time_requested: 'Pengajuan jam dibalas', time_approved: 'Pengajuan disetujui', time_rejected: 'Pengajuan ditolak', audit_checked: 'Audit jam', voucher_issued: 'Voucher diterbitkan', edited: 'Data diubah', csat: 'CSAT customer' }
+const EV = { created: 'Case dibuat', responded: 'Sudah dibalas', resolved: 'Resolved', closed: 'Closed', reopened: 'Dibuka ulang', note: 'Catatan', level_changed: 'Level diubah', time_corrected: 'Waktu dikoreksi', time_requested: 'Pengajuan jam dibalas', time_approved: 'Pengajuan disetujui', time_rejected: 'Pengajuan ditolak', audit_checked: 'Audit jam', voucher_issued: 'Kode complimentary diterbitkan', edited: 'Data diubah', csat: 'CSAT customer' }
 const TL = { waktuMasuk: 'Waktu masuk', waktuFirstResponse: 'Waktu dibalas', waktuResolved: 'Resolved', waktuClosed: 'Closed' }
 const CC_ROOT = 'Factory/Operasional (cek root cause)'
 
@@ -74,7 +74,7 @@ export default function CaseDetail() {
           {c.costCenterFinal && <Row k="Cost center final" v={c.costCenterFinal} />}
           <Row k="PIC Dept" v={c.picDept} /><Row k="Root cause" v={c.rootCause} />
           <Row k="Kompensasi" v={c.kompensasiLabel} /><Row k="Nilai" v={c.nilaiKompensasi ? fmtRp(c.nilaiKompensasi) : '–'} />
-          {c.voucherCode && <Row k="Kode voucher" v={<span>{c.voucherCode} <span className="text-xs text-mute">({c.voucher?.status})</span></span>} />}
+          {c.voucherCode && <Row k="Kode complimentary" v={<span className="font-mono">{c.voucherCode} <span className="text-xs text-mute font-sans">({c.voucher?.status === 'Diterbitkan' ? 'belum dipakai' : c.voucher?.status})</span></span>} />}
         </Card>
         <Card className="p-4">
           <h3 className="font-bold mb-2">Waktu & SLA</h3>
@@ -136,7 +136,7 @@ export default function CaseDetail() {
         if (r?.voucherWarning) notify(r.voucherWarning, 'err')
         if (r?.voucher) setSheet('voucher')
       }} />
-      <Sheet open={sheet === 'voucher'} onClose={close} title="Voucher diterbitkan">
+      <Sheet open={sheet === 'voucher'} onClose={close} title="Kode complimentary diterbitkan">
         {c.voucher && <VoucherMsg c={c} notify={notify} masters={masters} />}
       </Sheet>
       <CloseSheet open={sheet === 'close'} onClose={close} c={c} onDone={async (b) => { const r = await act('close', b, 'Case closed'); if (r && writer) setSheet('survey') }} />
@@ -186,11 +186,20 @@ function SurveySheet({ open, onClose, c, notify, onSent }) {
 }
 
 function VoucherMsg({ c, notify, masters }) {
-  const msg = `Halo Kak, mohon maaf atas ketidaknyamanannya 🙏 Sebagai permintaan maaf, kami berikan ${c.voucher.jenis} dengan kode *${c.voucher.kode}*. Tunjukkan kode ini saat pembelian berikutnya ya. Terima kasih sudah memberi masukan untuk Cimol Bojot AA.`
+  const v = c.voucher
+  const days = masters?.settings?.voucherExpiryDays || 30
+  const until = v.tanggalDiterbitkan && !v.noExpiry ? new Date(new Date(v.tanggalDiterbitkan).getTime() + days * 864e5).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : null
+  const kat = v.kategori || 'Voucher'
+  const body = kat === 'Voucher'
+    ? `kami berikan ${v.jenis} dengan kode *${v.kode}*. Tunjukkan kode ini saat pembelian berikutnya ya${until ? ` (berlaku s/d ${until})` : ''}.`
+    : kat === 'Refund' ? `refund Kakak sedang kami proses dengan nomor referensi *${v.kode}*. Mohon simpan nomor ini bila perlu konfirmasi.`
+    : kat === 'Cover Pengobatan' ? `biaya pengobatan Kakak akan kami tanggung. Nomor referensi Kakak: *${v.kode}*. Tim kami akan menghubungi untuk prosesnya.`
+    : `kami berikan ${v.label || v.jenis}. Tunjukkan kode *${v.kode}* ke kasir di outlet ${c.outletName || 'kami'} untuk mengambilnya${until ? ` (berlaku s/d ${until})` : ''}.`
+  const msg = `Halo Kak, mohon maaf atas ketidaknyamanannya 🙏 Sebagai permintaan maaf, ${body} Terima kasih sudah memberi masukan untuk Cimol Bojot AA.`
   return (
     <div className="space-y-3">
-      <div className="text-3xl font-extrabold tracking-wider text-center py-3 bg-cream rounded-xl">{c.voucher.kode}</div>
-      <div className="text-sm text-mute">{c.voucher.jenis} · otomatis tertaut ke {c.caseId}</div>
+      <div className="text-3xl font-extrabold tracking-wider text-center py-3 bg-cream rounded-xl font-mono">{v.kode}</div>
+      <div className="text-sm text-mute">{v.label || v.jenis} · tertaut ke {c.caseId} · status bisa dilacak di Dashboard → Tracker complimentary</div>
       <textarea readOnly className={inputCls + ' min-h-[120px] py-2 text-sm'} value={msg} />
       <Btn className="w-full" onClick={() => copy(msg, notify, 'Pesan untuk customer tersalin')}>Salin pesan untuk customer</Btn>
     </div>
@@ -222,7 +231,7 @@ function ResolveSheet({ open, onClose, c, masters, onDone }) {
               <button type="button" key={x.key} onClick={() => { setK(x.key); setNilai(x.nilai || '') }}
                 className={`text-left rounded-xl border px-3 py-2.5 ${k === x.key ? 'border-brick bg-brick-soft' : 'border-line'}`}>
                 <div className="font-semibold text-sm flex items-center gap-2">{x.label}{(!x.standard || !c.level) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FBE3C8] text-[#8A4B00] font-bold">Di luar standard</span>}</div>
-                {x.voucherJenis && <div className="text-xs text-mute">Kode {x.voucherJenis} berikutnya otomatis dipakai</div>}
+                {x.voucherJenis ? <div className="text-xs text-mute">Kode {x.voucherJenis} berikutnya otomatis dipakai</div> : !['Apologize', 'Tidak Ada'].includes(x.jenis) && <div className="text-xs text-mute">Kode tracking dibuat otomatis</div>}
               </button>
             ))}
           </div>

@@ -519,3 +519,32 @@ def test_member_frt_level_breakdown_komp_tracker(ctx):
         c.post(f"/api/vouchers/{row['kode']}/status", json={"status": "Terpakai"}, headers=H)
         kt = c.get("/api/kompensasi-tracker", params={"from": "2026-09-01", "to": "2026-09-30"}, headers=H).json()
         assert kt["summary"]["terpakai"] == 1 and kt["summary"]["redemption"] == 1
+
+
+def test_complimentary_tracking_code(ctx):
+    c, H, o = ctx
+    L = login(c, "Lead", "123123")
+    M = login(c, "MA Bekasi", "123123")
+    V = login(c, "Lihat", "123123")
+    a = mk(c, H, o, subJenis="Missing Item", ringkasan="kurang 2", waktuMasuk=wib_iso(2026, 9, 20, 10, 0)).json()
+    r = c.post(f"/api/cases/{a['caseId']}/resolve", json={"rootCause": "lupa masuk", "kompensasiKey": "maj-replacement"}, headers=L).json()
+    kode = r["voucherCode"]
+    assert kode.startswith("CMP-RP-") and r["voucher"]["kode"] == kode
+    lk = c.get(f"/api/vouchers/lookup/{kode.lower()}", headers=M).json()
+    assert lk["status"] == "Diterbitkan" and lk["case"]["caseId"] == a["caseId"] and lk["kadaluarsa"]
+    assert c.get(f"/api/vouchers/lookup/{kode}", headers=V).status_code == 403
+    assert c.post(f"/api/vouchers/{kode}/status", json={"status": "Hangus"}, headers=M).status_code == 403
+    assert c.post(f"/api/vouchers/{kode}/status", json={"status": "Terpakai", "outlet": "Jagakarsa"}, headers=M).status_code == 200
+    assert c.post(f"/api/vouchers/{kode}/status", json={"status": "Terpakai"}, headers=M).status_code == 400
+    # refund: kode tanpa kadaluarsa; apologize: tanpa kode
+    b = mk(c, H, o, subJenis="Missing Item", ringkasan="kurang 3", waktuMasuk=wib_iso(2026, 9, 21, 10, 0)).json()
+    r = c.post(f"/api/cases/{b['caseId']}/resolve", json={"rootCause": "x", "kompensasiKey": "all-refund", "nilaiKompensasi": 15000}, headers=L).json()
+    assert r["voucherCode"].startswith("CMP-RF-")
+    assert c.get(f"/api/vouchers/lookup/{r['voucherCode']}", headers=L).json()["kadaluarsa"] is None
+    d = mk(c, H, o, subJenis="Hospitality", ringkasan="jutek", waktuMasuk=wib_iso(2026, 9, 22, 10, 0)).json()
+    r = c.post(f"/api/cases/{d['caseId']}/resolve", json={"rootCause": "x", "kompensasiKey": "min-apologize"}, headers=L).json()
+    assert not r.get("voucherCode")
+    kt = c.get("/api/kompensasi-tracker", params={"from": "2026-09-20", "to": "2026-09-22"}, headers=H).json()
+    st = {x["caseId"]: x for x in kt["rows"]}
+    assert st[a["caseId"]]["status"] == "Terpakai" and st[a["caseId"]]["dipakaiOleh"] == "MA Bekasi"
+    assert st[b["caseId"]]["status"] == "Diterbitkan" and st[b["caseId"]]["kadaluarsa"] is None

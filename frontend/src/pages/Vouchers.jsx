@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, useApp, useAsync, fmtDT, LEAD, WRITERS } from '../lib.jsx'
 import { Btn, Card, Chip, ErrorBox, Skeleton, Sheet, Field, inputCls } from '../ui.jsx'
+import { KodeLookup } from '../components.jsx'
 
 const ST = { Tersedia: 'bg-[#DCEBDD] text-ok', Diterbitkan: 'bg-[#F6E6C6] text-[#7A5410]', Terpakai: 'bg-[#E9E5DF] text-mute', Hangus: 'bg-brick-soft text-brick' }
 
@@ -18,6 +19,7 @@ export default function Vouchers() {
     <div>
       <div className="flex items-center justify-between mb-3"><h1 className="text-2xl font-extrabold">Kode Voucher</h1>{can(...LEAD) && <Btn size="sm" onClick={() => setImp(true)}>+ Tambah kode</Btn>}</div>
       <ErrorBox error={error} />
+      <Card className="p-4 mb-4"><h3 className="font-bold mb-2">Cek / pakai kode complimentary</h3><KodeLookup onDone={reload} /></Card>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {data?.stock.map((s) => (
           <Card key={s.jenis} className={`p-4 ${s.Tersedia < 10 ? 'border-brick' : ''}`}>

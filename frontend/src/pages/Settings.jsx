@@ -102,6 +102,16 @@ function Target() {
         <div className="grid sm:grid-cols-4 gap-3">
           <Field label="Jam mulai"><input type="time" className={c} value={st.opStart} onChange={(e) => setSt({ ...st, opStart: e.target.value })} /></Field>
           <Field label="Jam selesai"><input type="time" className={c} value={st.opEnd} onChange={(e) => setSt({ ...st, opEnd: e.target.value })} /></Field>
+          <div className="sm:col-span-2"><Field label="Hari kerja CS" hint="Hari yang tidak dipilih = libur: FRT, SLA, dan same-day tidak menghitung hari itu.">
+            <div className="flex flex-wrap gap-1.5">{['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((l, i) => {
+              const wd = st.workDays || [0, 1, 2, 3, 4, 5]; const on = wd.includes(i)
+              return <Chip key={l} active={on} className="!min-h-[34px] text-xs" onClick={() => setSt({ ...st, workDays: on ? wd.filter((x) => x !== i) : [...wd, i].sort() })}>{l}</Chip>
+            })}</div></Field></div>
+          <div className="sm:col-span-4"><Field label="Tanggal libur CS" hint="Mis. libur nasional / cuti bersama. Tidak dihitung dalam FRT, SLA, dan same-day.">
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {(st.holidays || []).map((h) => <span key={h} className="text-xs bg-cream rounded-lg px-2 py-1">{h} <button className="text-brick ml-1" onClick={() => setSt({ ...st, holidays: st.holidays.filter((x) => x !== h) })}>×</button></span>)}
+              <input type="date" className={c + ' !w-auto !min-h-[34px] text-sm'} onChange={(e) => { const v = e.target.value; if (v && !(st.holidays || []).includes(v)) setSt({ ...st, holidays: [...(st.holidays || []), v].sort() }); e.target.value = '' }} />
+            </div></Field></div>
           <Field label="Alert Critical setelah (menit)"><input className={c} value={st.alertCriticalAfterMin} onChange={(e) => setSt({ ...st, alertCriticalAfterMin: Number(e.target.value) || 20 })} /></Field>
           <Field label="Voucher hangus setelah (hari)"><input className={c} value={st.voucherExpiryDays} onChange={(e) => setSt({ ...st, voucherExpiryDays: Number(e.target.value) || 30 })} /></Field>
           <div className="sm:col-span-4 pt-2 border-t border-line font-bold text-sm">Integritas waktu (anti mundur-jam)</div>

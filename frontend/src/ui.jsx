@@ -109,11 +109,11 @@ export function Delta({ cur, prev, dir, isPct }) {
 export const pctOrNum = (key, v) => ['frt', 'avgResolution'].includes(key) ? (v === null || v === undefined ? '–' : `${Math.round(v * 10) / 10} mnt`) : fmtPct(v)
 
 export const CARA_HITUNG = {
-  frt: 'Waktu First Response − Waktu Masuk (menit). Case tanpa jam masuk tidak dihitung. FRT jam kerja hanya menghitung menit di dalam jam operasional CS.',
-  slaResponse: 'Case dengan FRT ≤ target channel (Critical: maks 30 menit) ÷ case yang sudah direspons. Channel CSAT Form & Review Online tidak dihitung.',
-  avgResolution: 'Rata-rata (Waktu Resolved − Waktu Masuk) untuk case yang sudah resolved.',
-  resolutionSla: 'Case resolved dalam target level (Minor 1 hari, Major 2 hari, Critical 3 hari) ÷ case resolved.',
-  sameDay: 'Resolved di tanggal yang sama ÷ komplain yang tanggal selesainya diketahui, termasuk yang masih open setelah harinya lewat.',
+  frt: 'Waktu masuk → waktu dibalas, hanya menit di jam operasional CS pada hari kerja (hari libur seperti Minggu & tanggal libur tidak dihitung). Waktu tunggu customer menurut jam kalender ditampilkan terpisah. Case tanpa jam masuk tidak dihitung.',
+  slaResponse: 'Case dengan FRT jam kerja ≤ target channel (Critical: maks 30 menit) ÷ case yang sudah direspons. Channel CSAT Form & Review Online tidak dihitung.',
+  avgResolution: 'Rata-rata (Waktu Resolved − Waktu Masuk) untuk case yang sudah resolved, tanpa menghitung hari libur CS.',
+  resolutionSla: 'Case resolved dalam target level (Minor 1 hari, Major 2 hari, Critical 3 hari; hari libur CS tidak dihitung) ÷ case resolved.',
+  sameDay: 'Resolved di tanggal yang sama (komplain yang masuk di hari libur / di luar jam operasional dihitung dari hari kerja berikutnya) ÷ komplain yang tanggal selesainya diketahui, termasuk yang masih open setelah harinya lewat.',
   fcr: 'Case resolved tanpa customer follow-up ulang ÷ case yang kolom Follow-up Ulang-nya diisi.',
   compSuccess: 'Komplain valid yang mendapat kompensasi (selain Tidak Ada) ÷ komplain valid.',
   reopen: 'Case yang pernah dibuka ulang ÷ case Closed.',

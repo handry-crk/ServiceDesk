@@ -140,7 +140,7 @@ export default function MeetingView() {
           <div className="grid gap-4 md:grid-cols-3 mt-4">
             <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold">Komplain per minggu</div><Weekly weeks={d.weeks} k="komplain" name="Komplain" fmt={fmtNum} /></div>
             <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold">% SLA Response</div><Weekly weeks={d.weeks} k="slaResponse" name="SLA" fmt={fmtPct} target={d.targets.slaResponse.target} /></div>
-            <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold">FRT per jam masuk</div><HourChart hours={d.hours} /><p className="text-sm text-mute">{d.insights.hour}</p></div>
+            <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold">Waktu tunggu customer per jam masuk</div><HourChart hours={d.hours} /><p className="text-sm text-mute">{d.insights.hour}</p></div>
           </div>
         </Slide>
         <Slide n={2} title={SLIDES[2]} refs={refs}>

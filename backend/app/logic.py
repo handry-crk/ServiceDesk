@@ -46,23 +46,101 @@ def _hm(s):
     return int(h), int(m)
 
 
-def work_minutes(start, end, op_start="08:00", op_end="22:00"):
-    """Menit di antara start dan end yang jatuh di jam operasional CS (WIB)."""
+def _cal(st):
+    """Kalender kerja CS dari Pengaturan."""
+    st = st or {}
+    sh, sm = _hm(st.get("opStart", "08:00"))
+    eh, em = _hm(st.get("opEnd", "22:00"))
+    wd = set(st.get("workDays", [0, 1, 2, 3, 4, 5]))
+    hol = set(st.get("holidays") or [])
+    return sh, sm, eh, em, wd, hol
+
+
+def is_work_day(d, st):
+    _, _, _, _, wd, hol = _cal(st)
+    return d.weekday() in wd and d.isoformat() not in hol
+
+
+def work_minutes(start, end, st=None):
+    """Menit di antara start dan end yang jatuh di jam operasional CS pada hari kerja (WIB)."""
     s, e = wib(start), wib(end)
     if not s or not e or e <= s:
         return 0.0 if s and e else None
-    sh, sm = _hm(op_start)
-    eh, em = _hm(op_end)
+    sh, sm, eh, em, _, _ = _cal(st)
     total = 0.0
     day = s.date()
     while day <= e.date():
-        ws = datetime(day.year, day.month, day.day, sh, sm, tzinfo=WIB)
-        we = datetime(day.year, day.month, day.day, eh, em, tzinfo=WIB)
-        a, b = max(ws, s), min(we, e)
-        if b > a:
-            total += (b - a).total_seconds() / 60
+        if is_work_day(day, st):
+            ws = datetime(day.year, day.month, day.day, sh, sm, tzinfo=WIB)
+            we = datetime(day.year, day.month, day.day, eh, em, tzinfo=WIB)
+            a, b = max(ws, s), min(we, e)
+            if b > a:
+                total += (b - a).total_seconds() / 60
         day += timedelta(days=1)
     return round(total, 1)
+
+
+def biz_minutes(start, end, st=None):
+    """Menit kalender penuh, dikurangi hari libur CS (untuk SLA penyelesaian 1/2/3 hari)."""
+    s, e = wib(start), wib(end)
+    if not s or not e or e <= s:
+        return 0.0 if s and e else None
+    total = 0.0
+    day = s.date()
+    while day <= e.date():
+        if is_work_day(day, st):
+            ds = datetime(day.year, day.month, day.day, tzinfo=WIB)
+            a, b = max(ds, s), min(ds + timedelta(days=1), e)
+            if b > a:
+                total += (b - a).total_seconds() / 60
+        day += timedelta(days=1)
+    return round(total, 1)
+
+
+def next_work_start(t, st=None):
+    """Saat CS mulai bisa membalas: t sendiri bila di jam kerja, selain itu jam buka hari kerja berikutnya."""
+    t = wib(t)
+    sh, sm, eh, em, _, _ = _cal(st)
+    day = t.date()
+    for _ in range(60):
+        if is_work_day(day, st):
+            ws = datetime(day.year, day.month, day.day, sh, sm, tzinfo=WIB)
+            we = datetime(day.year, day.month, day.day, eh, em, tzinfo=WIB)
+            if t < we:
+                return max(t, ws)
+        day += timedelta(days=1)
+        t = datetime(day.year, day.month, day.day, tzinfo=WIB)
+    return t
+
+
+def add_work_minutes(t, mins, st=None):
+    """Batas waktu: t + N menit jam kerja."""
+    sh, sm, eh, em, _, _ = _cal(st)
+    cur = next_work_start(t, st)
+    left = mins
+    for _ in range(400):
+        we = datetime(cur.year, cur.month, cur.day, eh, em, tzinfo=WIB)
+        avail = (we - cur).total_seconds() / 60
+        if left <= avail:
+            return cur + timedelta(minutes=left)
+        left -= avail
+        cur = next_work_start(we + timedelta(minutes=1), st)
+    return cur
+
+
+def add_biz_minutes(t, mins, st=None):
+    """Batas waktu: t + N menit kalender, melompati hari libur."""
+    cur = wib(t)
+    left = mins
+    for _ in range(400):
+        nxt = datetime(cur.year, cur.month, cur.day, tzinfo=WIB) + timedelta(days=1)
+        if is_work_day(cur.date(), st):
+            avail = (nxt - cur).total_seconds() / 60
+            if left <= avail:
+                return cur + timedelta(minutes=left)
+            left -= avail
+        cur = nxt
+    return cur
 
 
 def compute_case(c: dict, ctx: dict) -> dict:
@@ -120,18 +198,23 @@ def compute_case(c: dict, ctx: dict) -> dict:
     c["countInSla"] = ch.get("countInSla", True)
     has_time = c.get("hasTime", True)
     st = ctx["settings"]
+    # FRT dihitung dalam jam kerja CS (hari libur & di luar jam operasional tidak dihitung).
+    # waitMin = waktu tunggu customer menurut jam kalender (informasi).
     if has_time and c.get("waktuFirstResponse"):
-        c["frtMin"] = _minutes(c["waktuMasuk"], c["waktuFirstResponse"])
-        c["frtWorkMin"] = work_minutes(c["waktuMasuk"], c["waktuFirstResponse"],
-                                       st.get("opStart", "08:00"), st.get("opEnd", "22:00"))
+        c["waitMin"] = _minutes(c["waktuMasuk"], c["waktuFirstResponse"])
+        c["frtMin"] = c["frtWorkMin"] = work_minutes(c["waktuMasuk"], c["waktuFirstResponse"], st)
         c["slaResponseOk"] = (c["frtMin"] is not None and c["frtMin"] <= tfrt) if c["countInSla"] else None
     else:
-        c["frtMin"] = c["frtWorkMin"] = None
+        c["frtMin"] = c["frtWorkMin"] = c["waitMin"] = None
         c["slaResponseOk"] = None
+    if has_time and c.get("waktuMasuk"):
+        c["frtDueAt"] = add_work_minutes(c["waktuMasuk"], tfrt, st)
+    else:
+        c["frtDueAt"] = None
     # integritas waktu: jam sistem (saat tombol ditekan) vs jam yang dilaporkan
     fr_rec = c.get("frRecordedAt")
     if has_time and fr_rec and c.get("waktuMasuk"):
-        c["frtSystemMin"] = _minutes(c["waktuMasuk"], fr_rec)
+        c["frtSystemMin"] = work_minutes(c["waktuMasuk"], fr_rec, st)
         c["frBackdateMin"] = max(0, round((as_utc(fr_rec) - as_utc(c["waktuFirstResponse"])).total_seconds() / 60)) \
             if c.get("waktuFirstResponse") else None
     else:
@@ -143,15 +226,19 @@ def compute_case(c: dict, ctx: dict) -> dict:
         c["masukLagMin"] = None
     tres = ctx["resTarget"].get(lvl) if lvl else None
     c["targetResolutionMin"] = tres
+    c["resolutionDueAt"] = add_biz_minutes(c["waktuMasuk"], tres, st) if (has_time and tres and c.get("waktuMasuk")) else None
     if has_time and c.get("waktuResolved"):
-        c["resolutionMin"] = _minutes(c["waktuMasuk"], c["waktuResolved"])
+        c["resolutionCalMin"] = _minutes(c["waktuMasuk"], c["waktuResolved"])
+        c["resolutionMin"] = biz_minutes(c["waktuMasuk"], c["waktuResolved"], st)
         c["resolutionSlaOk"] = (c["resolutionMin"] <= tres) if (tres and c["resolutionMin"] is not None) else None
     else:
-        c["resolutionMin"] = None
+        c["resolutionMin"] = c["resolutionCalMin"] = None
         c["resolutionSlaOk"] = None
-    dm = wib_date(c.get("waktuMasuk"))
+    # same day: komplain di hari libur / di luar jam operasional dihitung dari hari kerja berikutnya
+    dm = wib_date(next_work_start(c["waktuMasuk"], st)) if c.get("waktuMasuk") else None
+    c["sameDayBase"] = dm.isoformat() if dm else None
     if c.get("waktuResolved"):
-        c["sameDay"] = wib_date(c["waktuResolved"]) == dm
+        c["sameDay"] = wib_date(c["waktuResolved"]) <= dm
     elif dm and wib_date(now()) > dm:
         c["sameDay"] = False
     else:
@@ -161,7 +248,8 @@ def compute_case(c: dict, ctx: dict) -> dict:
     cs = c.get("csat")
     c["puas"] = (cs >= 4) if isinstance(cs, (int, float)) else None
     c["jamMasuk"] = wib(c["waktuMasuk"]).hour if (c.get("waktuMasuk") and has_time) else None
-    c["tanggalMasuk"] = dm.isoformat() if dm else None
+    dmasuk = wib_date(c.get("waktuMasuk"))
+    c["tanggalMasuk"] = dmasuk.isoformat() if dmasuk else None
     c["dataIssues"] = data_issues(c, pj_auto)
     c["dataOk"] = not any(i for i in c["dataIssues"] if not i.startswith("Info:"))
     return c
@@ -238,6 +326,7 @@ def compute_metrics(cases, targets, total_trx=None):
     m = {
         "frt": _avg([c["frtMin"] for c in responded]),
         "frtWork": _avg([c.get("frtWorkMin") for c in responded]),
+        "wait": _avg([c.get("waitMin") for c in responded]),
         "slaResponse": _rate(sum(1 for c in sla_base if c.get("slaResponseOk")), len(sla_base)),
         "avgResolution": _avg([c["resolutionMin"] for c in resolved]),
         "resolutionSla": _rate(sum(1 for c in res_sla_base if c["resolutionSlaOk"]), len(res_sla_base)),
@@ -339,7 +428,7 @@ def by_member(cases, targets):
         frts = [c["frtMin"] for c in cs]
         rows.append({
             "name": name, "count": len(cs), "avgFrt": _avg(frts), "medianFrt": round(median(frts), 1),
-            "avgFrtWork": _avg([c.get("frtWorkMin") for c in cs]),
+            "avgFrtWork": _avg([c.get("frtWorkMin") for c in cs]), "avgWait": _avg([c.get("waitMin") for c in cs]),
             "slaResponse": _rate(sum(1 for c in sla if c["slaResponseOk"]), len(sla)),
             "late": sum(1 for c in sla if not c["slaResponseOk"]),
             "critical": sum(1 for c in cs if c.get("level") == "Critical"),
@@ -402,7 +491,8 @@ def by_hour(cases):
     rows = []
     for h in range(24):
         cs = [c for c in cases if c.get("jamMasuk") == h]
-        rows.append({"hour": h, "count": len(cs), "avgFrt": _avg([c.get("frtMin") for c in cs]),
+        rows.append({"hour": h, "count": len(cs), "avgFrt": _avg([c.get("waitMin") for c in cs]),
+                     "avgFrtWork": _avg([c.get("frtMin") for c in cs]),
                      "late": sum(1 for c in cs if c.get("slaResponseOk") is False)})
     return rows
 

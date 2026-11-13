@@ -129,10 +129,10 @@ def test_time_rules_and_formulas(ctx):
     assert c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuMasuk", "value": None, "reason": "x"}, headers=H).status_code == 400
     assert c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuClosed", "value": wib_iso(2026, 11, 3, 9, 0), "reason": "x"}, headers=H).status_code == 400
     assert c.post(f"/api/cases/{cid}/correct-time", json={"field": "waktuResolved", "value": wib_iso(2026, 11, 3, 9, 0), "reason": ""}, headers=H).status_code == 400
-    # FRT jam kerja: masuk 21:50, balas besok 08:10, jam CS 08–22 → 10 + 10 = 20 menit
+    # FRT = jam kerja: masuk 21:50, balas besok 08:10, jam CS 08–22 → 10 + 10 = 20 menit (tunggu kalender 620)
     k = mk(c, H, o, subJenis="Speed of Service", waktuMasuk=wib_iso(2026, 11, 4, 21, 50)).json()
     r = c.post(f"/api/cases/{k['caseId']}/correct-time", json={"field": "waktuFirstResponse", "value": wib_iso(2026, 11, 5, 8, 10), "reason": "chat malam"}, headers=H).json()
-    assert r["frtMin"] == 620 and r["frtWorkMin"] == 20 and r["slaResponseOk"] is False and r["status"] == "Responded"
+    assert r["waitMin"] == 620 and r["frtMin"] == 20 and r["frtWorkMin"] == 20 and r["slaResponseOk"] is False and r["status"] == "Responded"
     # resolved lewat tengah malam → bukan same day
     r = c.post(f"/api/cases/{k['caseId']}/correct-time", json={"field": "waktuResolved", "value": wib_iso(2026, 11, 5, 8, 30), "reason": "x"}, headers=H).json()
     assert r["sameDay"] is False and r["resolutionMin"] == 640 and r["resolutionSlaOk"] is True  # Minor 1440
@@ -370,8 +370,22 @@ def test_csat_complaint_and_outlet(ctx):
     assert c.post(f"/api/cases/{cid}/survey-sent", json={}, headers=V).status_code == 403
 
 
+def _settings(c, H, **kw):
+    st = c.get("/api/masters", headers=H).json()["settings"]
+    c.put("/api/masters/settings", json={"value": {**st, **kw}, "reason": "uji"}, headers=H)
+    return st
+
+
 def test_first_response_time_edit(ctx):
     c, H, o = ctx
+    old = _settings(c, H, opStart="00:00", opEnd="23:59", workDays=[0, 1, 2, 3, 4, 5, 6])
+    try:
+        _fr_edit(c, H, o)
+    finally:
+        _settings(c, H, **old)
+
+
+def _fr_edit(c, H, o):
     A = login(c, "Agen", "123123")
     L = login(c, "Lead", "123123")
     now_w = datetime.now(WIB).replace(second=0, microsecond=0)
@@ -548,3 +562,34 @@ def test_complimentary_tracking_code(ctx):
     st = {x["caseId"]: x for x in kt["rows"]}
     assert st[a["caseId"]]["status"] == "Terpakai" and st[a["caseId"]]["dipakaiOleh"] == "MA Bekasi"
     assert st[b["caseId"]]["status"] == "Diterbitkan" and st[b["caseId"]]["kadaluarsa"] is None
+
+
+def test_sunday_off_and_holidays(ctx):
+    c, H, o = ctx
+    L = login(c, "Lead", "123123")
+    # Minggu 8 Nov 15:00, dibalas Senin 08:02 → FRT jam kerja 4 mnt (lolos), tunggu kalender 1024 mnt
+    k = mk(c, H, o, subJenis="Hospitality", ringkasan="minggu", waktuMasuk=wib_iso(2026, 11, 8, 15, 0)).json()
+    assert k["frtDueAt"].startswith("2026-11-09T01:0")  # Senin 08:0x WIB (jam buka + target channel)
+    r = c.post(f"/api/cases/{k['caseId']}/correct-time", json={"field": "waktuFirstResponse", "value": wib_iso(2026, 11, 9, 8, 2), "reason": "libur"}, headers=H).json()
+    assert "frtMin" in r, r
+    assert r["frtMin"] == 2 and r["waitMin"] == 1022 and r["slaResponseOk"] is True
+    r = c.post(f"/api/cases/{k['caseId']}/correct-time", json={"field": "waktuResolved", "value": wib_iso(2026, 11, 9, 15, 0), "reason": "x"}, headers=H).json()
+    assert r["sameDay"] is True and r["sameDayBase"] == "2026-11-09" and r["resolutionMin"] == 900 and r["resolutionCalMin"] == 1440
+    # tanggal libur: Senin 9 Nov libur → dibalas Selasa 08:02 tetap 4 mnt
+    old = _settings(c, H, holidays=["2026-11-09"])
+    try:
+        k2 = mk(c, H, o, subJenis="Hospitality", ringkasan="libur nasional", waktuMasuk=wib_iso(2026, 11, 8, 20, 0)).json()
+        r = c.post(f"/api/cases/{k2['caseId']}/correct-time", json={"field": "waktuFirstResponse", "value": wib_iso(2026, 11, 10, 8, 2), "reason": "libur"}, headers=H).json()
+        assert r["frtMin"] == 2 and r["slaResponseOk"] is True
+        # hari kerja biasa tidak berubah: Sabtu 21:50 → Senin 08:10 = 10 + 10 (Minggu & tgl 9 libur? Sabtu 7 → Selasa 10)
+        k3 = mk(c, H, o, subJenis="Hospitality", ringkasan="sabtu malam", waktuMasuk=wib_iso(2026, 11, 7, 21, 50)).json()
+        r = c.post(f"/api/cases/{k3['caseId']}/correct-time", json={"field": "waktuFirstResponse", "value": wib_iso(2026, 11, 10, 8, 10), "reason": "x"}, headers=H).json()
+        assert r["frtMin"] == 20
+    finally:
+        _settings(c, H, **old)
+
+
+def test_tanggal_masuk_sunday_kept(ctx):
+    c, H, o = ctx
+    k = mk(c, H, o, subJenis="Hospitality", ringkasan="minggu malam", waktuMasuk=wib_iso(2026, 11, 8, 23, 0)).json()
+    assert k["tanggalMasuk"] == "2026-11-08" and k["sameDayBase"] == "2026-11-09" and k["jamMasuk"] == 23

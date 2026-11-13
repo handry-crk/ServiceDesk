@@ -153,3 +153,24 @@ export const waLink = (phone, text) => `https://wa.me/${waNumber(phone)}?text=${
 export const surveyMessage = (c, url) =>
   `Halo Kak${c.customerName ? ' ' + c.customerName : ''}, terima kasih sudah menyampaikan keluhan ke ${c.brand || 'Cimol Bojot AA'} 🙏\n\n` +
   `Boleh bantu nilai penanganan keluhan Kakak? Cukup 1 klik (kurang dari 10 detik):\n${url}\n\nMasukan Kakak membantu kami jadi lebih baik.`
+
+// Menit jam kerja CS (sama dengan perhitungan server): hanya jam operasional pada hari kerja.
+export function workMinutes(start, end, st = {}) {
+  const s = new Date(start).getTime(), e = new Date(end).getTime()
+  if (!(e > s)) return 0
+  const [sh, sm] = (st.opStart || '08:00').split(':').map(Number), [eh, em] = (st.opEnd || '22:00').split(':').map(Number)
+  const wd = st.workDays || [0, 1, 2, 3, 4, 5], hol = st.holidays || []
+  const W = 7 * 3600e3
+  let day = new Date(Math.floor((s + W) / 864e5) * 864e5) // tengah malam WIB (dalam UTC+7 semu)
+  let total = 0
+  while (day.getTime() - W <= e) {
+    const iso = day.toISOString().slice(0, 10), dow = (day.getUTCDay() + 6) % 7
+    if (wd.includes(dow) && !hol.includes(iso)) {
+      const ws = day.getTime() - W + (sh * 60 + sm) * 6e4, we = day.getTime() - W + (eh * 60 + em) * 6e4
+      const a = Math.max(ws, s), b = Math.min(we, e)
+      if (b > a) total += (b - a) / 6e4
+    }
+    day = new Date(day.getTime() + 864e5)
+  }
+  return Math.round(total)
+}

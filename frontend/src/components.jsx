@@ -11,17 +11,18 @@ export function useNow(ms = 30000) {
 
 export function SlaChip({ c, now }) {
   const age = (now - new Date(c.waktuMasuk).getTime()) / 60000
+  const cls = (bad, warn) => `text-xs font-semibold px-2 py-0.5 rounded-md ${bad ? 'bg-brick text-white' : warn ? 'bg-[#F6E6C6] text-[#7A5410]' : 'bg-[#E9E5DF]'}`
   if (c.status === 'Open') {
-    const over = age > (c.targetFrtMin || 5)
-    return <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${over ? 'bg-brick text-white' : 'bg-[#F6E6C6] text-[#7A5410]'}`}>
-      {over ? 'Lewat target balas · ' : ''}{fmtMin(age)} sejak masuk
+    const due = c.frtDueAt ? new Date(c.frtDueAt).getTime() : new Date(c.waktuMasuk).getTime() + (c.targetFrtMin || 5) * 6e4
+    const over = now > due
+    const closed = !over && due - now > (c.targetFrtMin || 5) * 6e4 + 6e4
+    return <span className={cls(over, true)}>
+      {over ? `Lewat target balas · ${fmtMin(age)} sejak masuk` : closed ? `CS libur/tutup · target balas ${fmtDT(c.frtDueAt)}` : `${fmtMin(age)} sejak masuk`}
     </span>
   }
   if (c.status === 'Responded' && c.targetResolutionMin) {
-    const left = c.targetResolutionMin - age
-    return <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${left < 0 ? 'bg-brick text-white' : left < 240 ? 'bg-[#F6E6C6] text-[#7A5410]' : 'bg-[#E9E5DF]'}`}>
-      {left < 0 ? `Lewat SLA ${fmtMin(-left)}` : `Sisa ${fmtMin(left)}`}
-    </span>
+    const left = c.resolutionDueAt ? (new Date(c.resolutionDueAt).getTime() - now) / 6e4 : c.targetResolutionMin - age
+    return <span className={cls(left < 0, left < 240)}>{left < 0 ? `Lewat SLA ${fmtMin(-left)}` : `Sisa ${fmtMin(left)}`}</span>
   }
   return null
 }

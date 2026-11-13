@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { api, useApp, useAsync, fmtDT, fmtMin, fmtRp, toLocalInput, fromLocalInput, WRITERS, LEAD, waNumber, waLink, surveyMessage } from '../lib.jsx'
+import { api, useApp, useAsync, fmtDT, fmtMin, fmtRp, toLocalInput, fromLocalInput, WRITERS, LEAD, waNumber, waLink, surveyMessage, workMinutes } from '../lib.jsx'
 import { Btn, Card, Chip, Field, Sheet, Skeleton, ErrorBox, LevelBadge, StatusBadge, inputCls } from '../ui.jsx'
 import { SlaChip, useNow, Combo, levelItemBadge, PhotoPick } from '../components.jsx'
 
@@ -80,12 +80,12 @@ export default function CaseDetail() {
           <h3 className="font-bold mb-2">Waktu & SLA</h3>
           <Row k="Masuk" v={fmtDT(c.waktuMasuk) + (c.hasTime === false ? ' (tanpa jam)' : '')} />
           <Row k="First response" v={<span>{fmtDT(c.waktuFirstResponse)}{c.frtManual && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-cream text-mute font-semibold" title="Jam dibalas diisi manual oleh CS">dicatat manual</span>}</span>} /><Row k="Resolved" v={fmtDT(c.waktuResolved)} /><Row k="Closed" v={fmtDT(c.waktuClosed)} />
-          <Row k="FRT" v={<span className={c.slaResponseOk === false ? 'text-brick' : c.slaResponseOk ? 'text-ok' : ''}>{fmtMin(c.frtMin)} / target {c.targetFrtMin} mnt</span>} />
-          <Row k="FRT jam kerja" v={fmtMin(c.frtWorkMin)} />
+          <Row k="FRT (jam kerja)" v={<span className={c.slaResponseOk === false ? 'text-brick' : c.slaResponseOk ? 'text-ok' : ''}>{fmtMin(c.frtMin)} / target {c.targetFrtMin} mnt</span>} />
+          {c.waitMin != null && <Row k="Waktu tunggu customer (kalender)" v={fmtMin(c.waitMin)} />}
           {c.frtSystemMin != null && c.frtSystemMin !== c.frtMin && <Row k="FRT sistem (jam tombol ditekan)" v={<span className={c.slaRescued ? 'text-brick' : ''}>{fmtMin(c.frtSystemMin)}{c.slaRescued ? ' · SLA lolos karena jam manual' : ''}</span>} />}
           {c.masukLagMin > (masters?.settings?.masukLagReasonMin ?? 30) && <Row k="Dicatat setelah masuk" v={<span>{fmtMin(c.masukLagMin)}{c.waktuMasukReason ? ` · ${c.waktuMasukReason}` : ''}</span>} />}
-          <Row k="Resolusi" v={<span className={c.resolutionSlaOk === false ? 'text-brick' : c.resolutionSlaOk ? 'text-ok' : ''}>{fmtMin(c.resolutionMin)}{c.targetResolutionMin ? ` / target ${fmtMin(c.targetResolutionMin)}` : ''}</span>} />
-          <Row k="Same day" v={c.sameDay === null ? '–' : c.sameDay ? 'Ya' : 'Tidak'} /><Row k="Follow-up ulang" v={c.followUpUlang} />
+          <Row k="Resolusi (tanpa hari libur)" v={<span className={c.resolutionSlaOk === false ? 'text-brick' : c.resolutionSlaOk ? 'text-ok' : ''}>{fmtMin(c.resolutionMin)}{c.targetResolutionMin ? ` / target ${fmtMin(c.targetResolutionMin)}` : ''}</span>} />
+          <Row k="Same day" v={<span>{c.sameDay === null ? '–' : c.sameDay ? 'Ya' : 'Tidak'}{c.sameDayBase && c.sameDayBase !== (c.tanggalMasuk || '') ? <span className="text-xs text-mute"> · dihitung dari {c.sameDayBase} (hari kerja berikutnya)</span> : ''}</span>} /><Row k="Follow-up ulang" v={c.followUpUlang} />
           <Row k="Dibuka ulang" v={c.reopenCount ? `${c.reopenCount}×` : 'Tidak'} /><Row k="CSAT" v={c.csat ? `${c.csat}/5` : '–'} />
         </Card>
         {frozen && <Card className="p-4">
@@ -322,7 +322,7 @@ function RespondSheet({ open, onClose, c, onDone, title, edit }) {
   const at = v ? new Date(fromLocalInput(v)) : null
   const base = edit ? new Date(c.frRecordedAt || c.waktuFirstResponse) : new Date()
   const back = at ? (base.getTime() - at.getTime()) / 60000 : 0
-  const frt = at ? Math.round((at - new Date(c.waktuMasuk)) / 60000) : null
+  const frt = at ? workMinutes(c.waktuMasuk, at, st) : null
   const faster = edit ? at && at < new Date(c.waktuFirstResponse) : back > 2
   const errMsg = !v ? 'Isi jam dibalas.' : v < masuk ? 'Tidak boleh sebelum waktu masuk.' : (Date.now() - at.getTime()) < -120000 ? 'Tidak boleh di masa depan.'
     : c.waktuResolved && at > new Date(c.waktuResolved) ? 'Tidak boleh setelah waktu Resolved.'
@@ -338,7 +338,7 @@ function RespondSheet({ open, onClose, c, onDone, title, edit }) {
         {!edit && <div className="flex flex-wrap gap-2">{[[5, '5 mnt lalu'], [15, '15 mnt lalu'], [30, '30 mnt lalu'], [60, '1 jam lalu']]
           .filter(([m]) => Date.now() - m * 60000 >= new Date(c.waktuMasuk).getTime()).map(([m, l]) => <Chip key={m} onClick={() => quick(m)}>{l}</Chip>)}</div>}
         <Field label="Jam dibalas" required><input type="datetime-local" className={inputCls} value={v} min={masuk} max={toLocalInput()} onChange={(e) => setV(e.target.value)} /></Field>
-        {v && !errMsg && <div className="text-sm bg-cream rounded-xl p-3">FRT jadi <b>{fmtMin(frt)}</b> (target {c.targetFrtMin} mnt) — {frt <= c.targetFrtMin ? <span className="text-ok font-semibold">sesuai SLA</span> : <span className="text-brick font-semibold">lewat SLA</span>}</div>}
+        {v && !errMsg && <div className="text-sm bg-cream rounded-xl p-3">FRT jam kerja jadi <b>{fmtMin(frt)}</b> (target {c.targetFrtMin} mnt) — {frt <= c.targetFrtMin ? <span className="text-ok font-semibold">sesuai SLA</span> : <span className="text-brick font-semibold">lewat SLA</span>}</div>}
         {v && errMsg && <div className="text-sm text-brick">{errMsg}</div>}
         {v && !errMsg && needApproval && <div className="text-sm rounded-xl border border-warn bg-[#FBF1DC] p-3">
           <b>Perlu persetujuan CRM Supervisor.</b> {edit ? 'Jam dibalas jadi lebih awal.' : `Lebih dari ${grace} menit ke belakang.`} Lampirkan screenshot chat yang memperlihatkan jam pesan customer dan jam balasan Anda. {!edit && 'Sampai disetujui, yang tercatat adalah jam sekarang.'}

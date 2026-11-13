@@ -205,6 +205,8 @@ CRITICAL_FRT = 30
 SETTINGS = {
     "opStart": "08:00",          # jam operasional CS — konfirmasi CS Lead
     "opEnd": "22:00",
+    "workDays": [0, 1, 2, 3, 4, 5],   # hari kerja CS (0 = Senin … 6 = Minggu); Minggu libur
+    "holidays": [],                   # tanggal libur CS, format YYYY-MM-DD
     "voucherExpiryDays": 30,
     "alertCriticalAfterMin": 20,
     "emailRecipients": [],

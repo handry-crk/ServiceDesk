@@ -33,7 +33,7 @@ export const ChartCard = ({ title, insight, children, info, className = '' }) =>
 
 export function Headline({ d }) {
   const tiles = [
-    { k: 'frt', label: 'FRT rata-rata', v: d.metrics.frt === null ? '–' : `${fmtNum(d.metrics.frt)} mnt`, sub: `Jam kerja: ${d.metrics.frtWork === null ? '–' : fmtNum(d.metrics.frtWork) + ' mnt'}${d.metrics.frtSystem != null ? ` · sistem: ${fmtNum(d.metrics.frtSystem)} mnt` : ''}${d.metrics.manualPct ? ` · ${fmtPct(d.metrics.manualPct)} jam manual` : ''}` },
+    { k: 'frt', label: 'FRT rata-rata (jam kerja)', v: d.metrics.frt === null ? '–' : `${fmtNum(d.metrics.frt)} mnt`, sub: `Waktu tunggu customer (kalender): ${d.metrics.wait == null ? '–' : fmtMin(d.metrics.wait)}${d.metrics.frtSystem != null ? ` · sistem: ${fmtNum(d.metrics.frtSystem)} mnt` : ''}${d.metrics.manualPct ? ` · ${fmtPct(d.metrics.manualPct)} jam manual` : ''}` },
     { k: 'slaResponse', label: '% SLA Response', v: fmtPct(d.metrics.slaResponse) },
     { k: 'sameDay', label: '% Same-Day Resolution', v: fmtPct(d.metrics.sameDay) },
     { k: 'csat', label: 'CSAT komplain (% puas)', v: fmtPct(d.metrics.csat),
@@ -137,15 +137,15 @@ export function MemberTable({ d }) {
   const rows = d.members || []
   return (
     <Card className="overflow-x-auto">
-      <h3 className="font-bold p-4 pb-1">First response per member<Info text="Dihitung per orang yang menekan Sudah dibalas (data impor sheet lama: kolom CS agent). FRT = waktu dibalas − waktu masuk. Sistem = jam tombol benar-benar ditekan." /></h3>
+      <h3 className="font-bold p-4 pb-1">First response per member<Info text="Dihitung per orang yang menekan Sudah dibalas (data impor sheet lama: kolom CS agent). FRT = menit jam kerja dari masuk sampai dibalas (hari libur tidak dihitung). Tunggu = waktu tunggu customer menurut jam kalender. Sistem = jam tombol benar-benar ditekan." /></h3>
       <p className="text-xs text-mute px-4 pb-2">Target FRT rata-rata ≤ {tg} mnt · target per channel tetap dipakai untuk % SLA.</p>
       <table className="w-full text-sm">
-        <thead className="text-left text-mute"><tr>{['Member', 'Dibalas', 'FRT rata-rata', 'Median', 'Jam kerja', '% SLA', 'Telat', 'Critical telat', 'FRT sistem', '% jam manual'].map((h) => <th key={h} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
+        <thead className="text-left text-mute"><tr>{['Member', 'Dibalas', 'FRT rata-rata', 'Median', 'Tunggu (kalender)', '% SLA', 'Telat', 'Critical telat', 'FRT sistem', '% jam manual'].map((h) => <th key={h} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.name} className="border-t border-line tabnum">
             <td className="px-3 py-2 font-semibold">{r.name}</td><td className="px-3 py-2">{r.count}</td>
             <td className={`px-3 py-2 font-bold ${r.onTarget === false ? 'text-brick' : r.onTarget ? 'text-ok' : ''}`}>{fmtMin(r.avgFrt)}</td>
-            <td className="px-3 py-2">{fmtMin(r.medianFrt)}</td><td className="px-3 py-2">{fmtMin(r.avgFrtWork)}</td>
+            <td className="px-3 py-2">{fmtMin(r.medianFrt)}</td><td className="px-3 py-2">{fmtMin(r.avgWait)}</td>
             <td className="px-3 py-2">{fmtPct(r.slaResponse)}</td><td className="px-3 py-2">{r.late}</td>
             <td className={`px-3 py-2 ${r.criticalLate ? 'text-brick font-bold' : ''}`}>{r.criticalLate}/{r.critical}</td>
             <td className="px-3 py-2">{fmtMin(r.frtSystem)}</td><td className="px-3 py-2">{fmtPct(r.manualPct)}</td>
@@ -265,7 +265,7 @@ export function HourChart({ hours }) {
         <XAxis dataKey="hour" tick={axis} tickLine={false} axisLine={{ stroke: GRID }} interval={1} />
         <YAxis tick={axis} tickLine={false} axisLine={false} width={44} />
         <Tooltip content={<Tip labelFmt={(h) => `Jam ${String(h).padStart(2, '0')}.00–${String(h).padStart(2, '0')}.59`} fmt={(v, k) => k === 'avgFrt' ? fmtMin(v) : fmtNum(v)} />} cursor={{ fill: '#F5F0E6' }} />
-        <Bar dataKey="avgFrt" name="FRT rata-rata" radius={[4, 4, 0, 0]} maxBarSize={18}>
+        <Bar dataKey="avgFrt" name="Waktu tunggu" radius={[4, 4, 0, 0]} maxBarSize={18}>
           {hours.map((h) => <Cell key={h.hour} fill={h.hour >= 19 || h.hour < 8 ? BRICK : '#D9A39E'} />)}
         </Bar>
       </BarChart>
@@ -291,7 +291,7 @@ export function DashboardBody({ d, meeting }) {
             link={meeting ? undefined : (e) => (location.href = `/case?subJenis=${encodeURIComponent(e.name)}&from=${d.period.from}&to=${d.period.to}`)} />
           <div className="flex gap-3 text-xs text-mute mt-1">{Object.entries(LEVEL_COLOR).map(([k, c]) => <span key={k} className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: c }} />{k}</span>)}<span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ background: MUTE }} />Belum diatur</span></div>
         </ChartCard>
-        <ChartCard title="FRT rata-rata per jam masuk" insight={d.insights.hour} info="Merah tua = chat masuk ≥ 19.00 atau < 08.00.">
+        <ChartCard title="Waktu tunggu customer per jam masuk" insight={d.insights.hour} info="Jam kalender (termasuk malam & hari libur), untuk melihat kapan customer menunggu paling lama. Merah tua = chat masuk ≥ 19.00 atau < 08.00.">
           <HourChart hours={d.hours} />
         </ChartCard>
       </div>
@@ -299,7 +299,7 @@ export function DashboardBody({ d, meeting }) {
         <h3 className="font-bold mb-2">Tren mingguan <span className="text-xs text-mute font-normal">(blok 7 hari dari awal periode)</span></h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div><div className="text-sm font-semibold">Komplain</div><Weekly weeks={d.weeks} k="komplain" name="Komplain" fmt={fmtNum} /></div>
-          <div><div className="text-sm font-semibold">FRT (menit)</div><Weekly weeks={d.weeks} k="frt" name="FRT" fmt={fmtNum} target={d.targets.frt.target} /></div>
+          <div><div className="text-sm font-semibold">FRT jam kerja (menit)</div><Weekly weeks={d.weeks} k="frt" name="FRT" fmt={fmtNum} target={d.targets.frt.target} /></div>
           <div><div className="text-sm font-semibold">% SLA Response</div><Weekly weeks={d.weeks} k="slaResponse" name="SLA Response" fmt={pctF} target={d.targets.slaResponse.target} /></div>
           <div><div className="text-sm font-semibold">% Same-Day</div><Weekly weeks={d.weeks} k="sameDay" name="Same-Day" fmt={pctF} target={d.targets.sameDay.target} /></div>
         </div>

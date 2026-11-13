@@ -268,8 +268,10 @@ async def _open_request(c, u, value, reason, photo, kind):
     if not photo:
         raise HTTPException(400, "Lampirkan screenshot chat yang menunjukkan jam pesan customer dan jam balasan Anda.")
     cur = c.get("waktuFirstResponse")
-    before = _mins(c["waktuMasuk"], cur) if cur else None
-    after = _mins(c["waktuMasuk"], value)
+    from .logic import work_minutes
+    st = (await load_ctx())["settings"]
+    before = round(work_minutes(c["waktuMasuk"], cur, st)) if cur else None
+    after = round(work_minutes(c["waktuMasuk"], value, st))
     tfrt = c.get("targetFrtMin") or 5
     req = {"id": new_id(), "kind": kind, "field": "waktuFirstResponse", "value": value, "current": cur,
            "reason": reason.strip(), "photo": photo, "by": u["name"], "byId": u["id"], "at": now(),
@@ -593,10 +595,11 @@ async def inbox(u=Depends(current_user)):
 
     def urgency(c):
         crit = 0 if c.get("level") == "Critical" else 1
-        if c["status"] == "Open":
-            left = c.get("targetFrtMin", 5) - (t - as_utc(c["waktuMasuk"])).total_seconds() / 60
+        due = c.get("frtDueAt") if c["status"] == "Open" else c.get("resolutionDueAt")
+        if due:
+            left = (as_utc(due) - t).total_seconds() / 60
         else:
-            tr = c.get("targetResolutionMin") or 4320
+            tr = c.get("targetFrtMin", 5) if c["status"] == "Open" else (c.get("targetResolutionMin") or 4320)
             left = tr - (t - as_utc(c["waktuMasuk"])).total_seconds() / 60
         return crit, left
 

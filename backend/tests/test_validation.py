@@ -593,3 +593,37 @@ def test_tanggal_masuk_sunday_kept(ctx):
     c, H, o = ctx
     k = mk(c, H, o, subJenis="Hospitality", ringkasan="minggu malam", waktuMasuk=wib_iso(2026, 11, 8, 23, 0)).json()
     assert k["tanggalMasuk"] == "2026-11-08" and k["sameDayBase"] == "2026-11-09" and k["jamMasuk"] == 23
+
+
+def test_cs_desks(ctx):
+    c, H, o = ctx
+    m = c.get("/api/masters", headers=H).json()
+    assert [d["key"] for d in m["desks"]] == ["Online", "Offline"]
+    assert {x["name"]: x["desk"] for x in m["channels"]}["GoFood"] == "Online"
+    for n, dk in (("Felita", "Online"), ("Aliya", "Online"), ("Intan", "Offline")):
+        r = c.post("/api/users", json={"name": n, "role": "CS Agent", "pin": "456456", "desk": dk}, headers=H)
+        assert r.status_code == 200 and r.json()["desk"] == dk, r.text
+    F = login(c, "Felita", "456456")
+    I = login(c, "Intan", "456456")
+    on = mk(c, F, o, channel="GoFood", subJenis="Missing Item", ringkasan="gofood kurang", orderNo="F-1").json()
+    fz = mk(c, F, o, outletId=o["Online Frozen (Shopee)"], channel="WhatsApp", subJenis="Missing Item", ringkasan="frozen kurang").json()
+    off = mk(c, I, o, channel="WhatsApp", subJenis="Hospitality", ringkasan="kasir jutek desk").json()
+    assert on["desk"] == "Online" and fz["desk"] == "Online" and off["desk"] == "Offline"
+    ib = c.get("/api/inbox", headers=F).json()
+    ids = [x["caseId"] for x in ib["open"]]
+    assert ib["desk"] == "Online" and on["caseId"] in ids and off["caseId"] not in ids
+    ib = c.get("/api/inbox", headers=I).json()
+    assert off["caseId"] in [x["caseId"] for x in ib["open"]] and on["caseId"] not in [x["caseId"] for x in ib["open"]]
+    assert on["caseId"] in [x["caseId"] for x in c.get("/api/inbox", params={"desk": "all"}, headers=I).json()["open"]]
+    # pindah desk manual
+    r = c.patch(f"/api/cases/{off['caseId']}", json={"deskOverride": "Online"}, headers=I).json()
+    assert r["desk"] == "Online"
+    c.post(f"/api/cases/{on['caseId']}/respond", headers=F)
+    c.post(f"/api/cases/{off['caseId']}/respond", headers=I)
+    t = on["tanggalMasuk"]
+    d = c.get("/api/dashboard", params={"from": t, "to": t}, headers=H).json()
+    mem = {x["name"]: x for x in d["members"]}
+    assert mem["Felita"]["desk"] == "Online" and mem["Intan"]["desk"] == "Offline"
+    dk = {x["desk"]: x for x in d["desks"]}
+    assert dk["Online"]["contact"] >= 3 and "Offline" in dk
+    assert all(x["desk"] == "Online" for x in c.get("/api/cases", params={"desk": "Online", "from": t, "to": t}, headers=H).json()["items"]) if isinstance(c.get("/api/cases", params={"desk": "Online"}, headers=H).json(), dict) else True

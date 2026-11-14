@@ -33,7 +33,7 @@ export default function Daftar() {
   const { rid } = useParams()
   const nav = useNavigate()
   const [info, setInfo] = useState(null)
-  const [f, setF] = useState({ name: '', email: '', role: '', pin: '', pin2: '', phone: '' })
+  const [f, setF] = useState({ name: '', email: '', role: '', pin: '', pin2: '', phone: '', desk: '' })
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const [st, setSt] = useState(null)
@@ -44,12 +44,12 @@ export default function Daftar() {
 
   const domain = info?.domain || 'citarasakuliner.com'
   const emailOk = f.email.trim().toLowerCase().endsWith('@' + domain)
-  const ok = f.name.trim().length >= 3 && emailOk && f.role && f.pin.length === 6 && f.pin === f.pin2
+  const ok = f.name.trim().length >= 3 && emailOk && f.role && f.pin.length === 6 && f.pin === f.pin2 && (f.role !== 'CS Agent' || f.desk)
 
   const submit = async (e) => {
     e.preventDefault(); setBusy(true); setErr(null)
     try {
-      const r = await api('/public/register', { method: 'POST', body: { name: f.name, email: f.email, role: f.role, pin: f.pin, phone: f.phone } })
+      const r = await api('/public/register', { method: 'POST', body: { name: f.name, email: f.email, role: f.role, pin: f.pin, phone: f.phone, desk: f.role === 'CS Agent' ? f.desk : null } })
       nav('/daftar/' + r.id, { replace: true })
     } catch (x) { setErr(x) } finally { setBusy(false) }
   }
@@ -102,6 +102,11 @@ export default function Daftar() {
             })}
           </div>
         </Field>
+        {f.role === 'CS Agent' && <Field label="Desk CS" required>
+          <div className="grid grid-cols-2 gap-2">{[['Online', 'CS Online / Marketplace', 'Marketplace frozen, GoFood/GrabFood/ShopeeFood'], ['Offline', 'CS Offline', 'Komplain outlet & gerobak']].map(([k, l, d]) => (
+            <button type="button" key={k} onClick={() => setF({ ...f, desk: k })} className={`text-left rounded-xl border px-3 py-2.5 ${f.desk === k ? 'border-brick bg-brick-soft' : 'border-line'}`}>
+              <div className="font-semibold text-sm">{l}</div><div className="text-xs text-mute">{d}</div></button>))}</div>
+        </Field>}
         <Field label="No. HP (opsional)"><input className={inputCls} inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Buat PIN (6 digit)" required><input className={inputCls + ' tracking-[.3em] text-center'} type="password" inputMode="numeric" maxLength={6} autoComplete="new-password" value={f.pin} onChange={(e) => setF({ ...f, pin: e.target.value.replace(/\D/g, '') })} /></Field>

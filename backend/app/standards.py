@@ -21,17 +21,29 @@ CHANNELS = [
     {"name": "Social Comment", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Chat & Sosmed"},
     {"name": "Email", "targetFrt": 240, "excellent": 60, "countInSla": True, "group": "Chat & Sosmed"},
     {"name": "Marketplace Chat", "targetFrt": 5, "excellent": 2, "countInSla": True, "group": "Marketplace (Frozen)",
-     "orderRequired": True},
+     "orderRequired": True, "desk": "Online"},
     # Online Food Aggregator — target awal 15 menit (asumsi; sesuaikan di Pengaturan → Target & SLA)
     {"name": "GoFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
-     "orderRequired": True},
+     "orderRequired": True, "desk": "Online"},
     {"name": "GrabFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
-     "orderRequired": True},
+     "orderRequired": True, "desk": "Online"},
     {"name": "ShopeeFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
-     "orderRequired": True},
+     "orderRequired": True, "desk": "Online"},
     {"name": "CSAT Form", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Survei & Review"},
     {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Survei & Review"},
 ]
+
+# Desk CS: Online/Marketplace (frozen marketplace + online food aggregator) dan Offline (outlet / gerobak)
+DESKS = ["Online", "Offline"]
+DESK_LABEL = {"Online": "CS Online / Marketplace", "Offline": "CS Offline"}
+
+
+def default_desk(channel_name):
+    for ch in CHANNELS:
+        if ch["name"] == channel_name:
+            return ch.get("desk", "Offline")
+    return "Offline"
+
 
 STANDARD_DOC = {"code": "CRM.STD.001", "title": "Standar Penanganan Komplain dan Complimentary", "revision": "00",
                 "effective": "2026-10-20", "reference": "CRK.QA.P.003 Keluhan Pelanggan; CRK.MMS.003 Manual Sistem Jaminan Produk Halal",

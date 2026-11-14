@@ -60,6 +60,11 @@ async def seed_if_empty():
         await db.outlets.insert_many([
             {"id": new_id(), "name": n, "type": S.outlet_type(n), "area": S.guess_area(n),
              "brand": "Cimol Bojot AA", "aliases": [], "active": True} for n in S.OUTLETS])
+    # migrasi: desk CS per channel (Online / Offline), lalu hitung ulang case lama agar punya desk
+    async for ch in db.channels.find({"desk": {"$exists": False}}):
+        await db.channels.update_one({"_id": ch["_id"]}, {"$set": {"desk": S.default_desk(ch["name"])}})
+    if await db.cases.count_documents({"desk": {"$exists": False}}):
+        await recompute_all()
     for n, area in S.NEW_OUTLETS.items():
         if not await db.outlets.find_one({"name": n}):
             await db.outlets.insert_one({"id": new_id(), "name": n, "type": S.outlet_type(n), "area": area,

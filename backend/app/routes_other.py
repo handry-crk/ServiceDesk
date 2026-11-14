@@ -60,7 +60,7 @@ async def masters(u=Depends(current_user)):
         "targets": ctx["targets"], "settings": ctx["settings"], "penanggungJawab": ctx["pj"],
         "resolutionTarget": ctx["resTarget"], "criticalFrt": ctx["criticalFrt"],
         "outlets": sorted([clean(x) for x in ctx["outlets"].values()], key=lambda x: x["name"]),
-        "picDept": S.PIC_DEPT, "tipe": S.TIPE, "reviewPlatforms": S.REVIEW_PLATFORMS, "couriers": S.COURIERS, "frozenProducts": S.FROZEN_PRODUCTS, "needsBatch": sorted(S.NEEDS_BATCH), "standardDoc": S.STANDARD_DOC, "areas": S.AREAS, "voucherJenis": S.VOUCHER_JENIS,
+        "picDept": S.PIC_DEPT, "tipe": S.TIPE, "reviewPlatforms": S.REVIEW_PLATFORMS, "desks": [{"key": k, "label": S.DESK_LABEL[k]} for k in S.DESKS], "couriers": S.COURIERS, "frozenProducts": S.FROZEN_PRODUCTS, "needsBatch": sorted(S.NEEDS_BATCH), "standardDoc": S.STANDARD_DOC, "areas": S.AREAS, "voucherJenis": S.VOUCHER_JENIS,
         "brands": sorted({o.get("brand") or "Cimol Bojot AA" for o in ctx["outlets"].values()}),
         "agents": sorted({u2["name"] async for u2 in db.users.find({"active": True})}),
     }
@@ -132,6 +132,7 @@ class UserIn(BaseModel):
     pin: str
     email: Optional[str] = None
     areas: list[str] = []
+    desk: Optional[str] = None
 
 
 @router.get("/roles")
@@ -170,8 +171,10 @@ async def add_user(body: UserIn, u=Depends(require(*LEAD))):
         if await db.users.find_one({"email": email}):
             raise HTTPException(400, "Email sudah dipakai user lain.")
     await check_slot(body.role)
+    if body.desk and body.desk not in S.DESKS:
+        raise HTTPException(400, "Desk tidak dikenal.")
     x = {"id": new_id(), "name": body.name, "email": email, "role": body.role, "areas": body.areas,
-         "pinHash": hash_pin(body.pin), "active": True, "created": now()}
+         "desk": body.desk or None, "pinHash": hash_pin(body.pin), "active": True, "created": now()}
     await db.users.insert_one(x)
     await audit(u, f"add user {body.name}", None, body.role)
     return public_user(x)
@@ -180,7 +183,9 @@ async def add_user(body: UserIn, u=Depends(require(*LEAD))):
 @router.patch("/users/{uid}")
 async def patch_user(uid: str, body: dict, u=Depends(require(*LEAD))):
     db = get_db()
-    upd = {k: v for k, v in body.items() if k in ("role", "areas", "active", "name")}
+    upd = {k: v for k, v in body.items() if k in ("role", "areas", "active", "name", "desk")}
+    if upd.get("desk") and upd["desk"] not in S.DESKS:
+        raise HTTPException(400, "Desk tidak dikenal.")
     target = await db.users.find_one({"id": uid})
     if not target:
         raise HTTPException(404, "User tidak ditemukan.")

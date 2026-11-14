@@ -191,6 +191,8 @@ def compute_case(c: dict, ctx: dict) -> dict:
 
     # target & SLA
     ch = ctx["channels"].get(c.get("channel") or "") or {}
+    # desk CS yang menangani: Online/Marketplace bila toko online frozen atau channel online; selain itu Offline
+    c["desk"] = c.get("deskOverride") or ("Online" if (otype == "online_frozen" or ch.get("desk") == "Online") else "Offline")
     tfrt = ch.get("targetFrt", 5)
     if lvl == "Critical":
         tfrt = min(tfrt, ctx.get("criticalFrt", 30))
@@ -414,7 +416,18 @@ def weekly(cases, start: date, end: date, targets):
     return out
 
 
-def by_member(cases, targets):
+def by_desk(cases, targets):
+    out = []
+    for dk in S.DESKS:
+        cs = [c for c in cases if c.get("desk") == dk]
+        m, vol, _ = compute_metrics(cs, targets)
+        out.append({"desk": dk, "label": S.DESK_LABEL[dk], "contact": vol["contact"], "komplain": vol["komplain"],
+                    "open": vol["open"], "critical": vol["critical"], "frt": m["frt"], "wait": m["wait"],
+                    "slaResponse": m["slaResponse"], "sameDay": m["sameDay"], "csat": m["csat"], "biaya": vol["biaya"]})
+    return out
+
+
+def by_member(cases, targets, desk_of=None):
     """First response per member (yang menekan Sudah dibalas; data lama: CS agent di sheet)."""
     from statistics import median
     groups = defaultdict(list)
@@ -436,6 +449,7 @@ def by_member(cases, targets):
             "frtSystem": _avg([c.get("frtSystemMin") for c in cs]),
             "manualPct": _rate(sum(1 for c in cs if c.get("frtManual")), sum(1 for c in cs if c.get("frRecordedAt"))),
             "onTarget": (_avg(frts) <= tgt) if (tgt is not None and frts) else None,
+            "desk": (desk_of or {}).get(name),
         })
     rows.sort(key=lambda r: -r["count"])
     return rows

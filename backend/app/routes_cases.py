@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from .auth import current_user, require, LEAD, WRITERS, MEETING_EDITORS
 from .core import get_db, now, parse_iso, as_utc, clean, mask_phone, wib_date, Config
 from . import standards as S
-from .logic import compute_case, load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights, by_member, level_breakdown
+from .logic import compute_case, load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights, by_member, level_breakdown, by_desk
 from .services import (next_case_id, save_case, add_event, audit, find_duplicates, get_case_or_404,
                        survey_token, issue_voucher, issue_complimentary, new_id)
 
@@ -146,13 +146,13 @@ async def list_cases(u=Depends(current_user), frm: Optional[str] = Query(None, a
                      subJenis: Optional[str] = None, channel: Optional[str] = None, outletId: Optional[str] = None,
                      area: Optional[str] = None, picDept: Optional[str] = None, kompensasi: Optional[str] = None,
                      luarStandard: bool = False, dataIssue: bool = False, agent: Optional[str] = None,
-                     q: Optional[str] = None, limit: int = 3000):
+                     q: Optional[str] = None, desk: Optional[str] = None, limit: int = 3000):
     qq = {}
     if frm or to:
         qq["tanggalMasuk"] = {"$gte": frm or "0000", "$lte": to or "9999"}
     for k, v in (("status", status), ("level", level), ("jenis", jenis), ("subJenis", subJenis),
                  ("channel", channel), ("outletId", outletId), ("area", area), ("picDept", picDept),
-                 ("kompensasiJenis", kompensasi), ("csAgent", agent)):
+                 ("kompensasiJenis", kompensasi), ("csAgent", agent), ("desk", desk)):
         if v:
             qq[k] = {"$in": v.split("|")} if "|" in v else v
     if luarStandard:
@@ -207,6 +207,7 @@ class PatchIn(BaseModel):
     noResi: Optional[str] = None
     qtyPesan: Optional[int] = None
     qtyDiterima: Optional[int] = None
+    deskOverride: Optional[str] = None
 
 
 @router.patch("/cases/{case_id}")
@@ -223,6 +224,10 @@ async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
     if "subJenis" in data and u["role"] not in LEAD and data["subJenis"] != c.get("subJenis"):
         if c["status"] not in ("Open", "Responded"):
             raise HTTPException(403, "Sub jenis case yang sudah Resolved hanya bisa diubah CS Lead.")
+    if "deskOverride" in data:
+        if data["deskOverride"] not in S.DESKS + [""]:
+            raise HTTPException(400, "Desk tidak dikenal.")
+        data["deskOverride"] = data["deskOverride"] or None
     before = {k: c.get(k) for k in data}
     c.update(data)
     if "subJenis" in data and before.get("subJenis") != data["subJenis"]:
@@ -587,10 +592,14 @@ async def delete_case(case_id: str, u=Depends(require("Admin"))):
 # ------------------------------------------------------------------ inbox
 
 @router.get("/inbox")
-async def inbox(u=Depends(current_user)):
+async def inbox(u=Depends(current_user), desk: Optional[str] = None):
+    """desk: Online / Offline / all. Default: desk milik user (CS Agent), selain itu semua."""
     db = get_db()
     q = area_filter(u, {"status": {"$in": ["Open", "Responded", "Resolved"]}})
-    rows = [c async for c in db.cases.find(q)]
+    allrows = [c async for c in db.cases.find(q)]
+    desk = desk or u.get("desk") or "all"
+    counts = {dk: sum(1 for c in allrows if c.get("desk", "Offline") == dk and c["status"] == "Open") for dk in S.DESKS}
+    rows = allrows if desk == "all" else [c for c in allrows if c.get("desk", "Offline") == desk]
     t = now()
 
     def urgency(c):
@@ -622,7 +631,7 @@ async def inbox(u=Depends(current_user)):
         for x in csat:
             x["phone"] = mask_phone(x.get("phone"))
     pend = await db.cases.count_documents({"timeRequest.id": {"$exists": True}}) if u["role"] in LEAD else 0
-    return {**sec, "csatDrafts": csat, "reviewDrafts": reviews, "timeRequests": pend}
+    return {**sec, "csatDrafts": csat, "reviewDrafts": reviews, "timeRequests": pend, "desk": desk, "openByDesk": counts}
 
 
 # ------------------------------------------------------------------ dashboard
@@ -645,6 +654,21 @@ async def total_trx(frm: date, to: date):
             have = True
         d += timedelta(days=1)
     return round(total) if have else None
+
+
+async def _members(cases, targets):
+    """FRT per member + CS aktif yang belum membalas di periode ini (tetap tampil dengan 0)."""
+    users = [x async for x in get_db().users.find({"active": {"$ne": False}}, {"name": 1, "desk": 1, "role": 1})]
+    rows = by_member(cases, targets, {x["name"]: x.get("desk") for x in users})
+    have = {r["name"] for r in rows}
+    for x in users:
+        if x.get("role") in ("CS Agent", "CS Lead") and x["name"] not in have:
+            rows.append({"name": x["name"], "desk": x.get("desk"), "count": 0, "avgFrt": None, "medianFrt": None,
+                         "avgFrtWork": None, "avgWait": None, "slaResponse": None, "late": 0, "critical": 0,
+                         "criticalLate": 0, "frtSystem": None, "manualPct": None, "onTarget": None})
+    order = {"Online": 0, "Offline": 1}
+    rows.sort(key=lambda r: (r["name"].startswith("Data lama"), order.get(r.get("desk"), 2), -r["count"]))
+    return rows
 
 
 async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None, line=None):
@@ -692,7 +716,8 @@ async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None, line
         "metrics": m, "prev": pm, "volume": vol, "prevVolume": pvol, "table": table, "targets": targets,
         "levels": levels, "jenis": jenis, "subJenis": subj, "channels": channels, "sourceGroups": sourceGroups, "picDept": pic,
         "outlets": outlets, "kompensasi": komp, "hours": hours, "weeks": weeks,
-        "members": by_member(cases, targets), "levelDetail": level_breakdown(komplain, f, t),
+        "members": await _members(cases, targets),
+        "desks": by_desk(cases, targets), "levelDetail": level_breakdown(komplain, f, t),
         "insights": insights(cases, m, vol, hours, subj, channels),
     }
 

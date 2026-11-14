@@ -118,6 +118,7 @@ export default function Catat() {
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <span>Level <b>{level || 'Belum Diatur'}</b></span><span>SLA <b>{sla}</b></span><span>PJ <b>{pj}</b></span>
               <span>Cost center <b>{cc}</b></span><span>Target balas <b>{tfrt} mnt</b></span>
+              {outlet && <span>Desk <b>{frozen || ch?.desk === 'Online' ? 'CS Online / Marketplace' : 'CS Offline'}</b></span>}
             </div>
           </div>
         )}

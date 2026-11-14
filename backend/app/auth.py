@@ -94,7 +94,7 @@ async def login(name: str, pin: str):
 def public_user(u):
     return {"id": u["id"], "name": u["name"], "email": u.get("email"), "role": u["role"],
             "roleLabel": ROLE_LABEL.get(u["role"], u["role"]), "areas": u.get("areas", []),
-            "active": u.get("active", True)}
+            "active": u.get("active", True), "desk": u.get("desk")}
 
 
 async def check_slot(role, exclude_id=None):

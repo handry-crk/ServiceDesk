@@ -139,18 +139,25 @@ export function MemberTable({ d }) {
     <Card className="overflow-x-auto">
       <h3 className="font-bold p-4 pb-1">First response per member<Info text="Dihitung per orang yang menekan Sudah dibalas (data impor sheet lama: kolom CS agent). FRT = menit jam kerja dari masuk sampai dibalas (hari libur tidak dihitung). Tunggu = waktu tunggu customer menurut jam kalender. Sistem = jam tombol benar-benar ditekan." /></h3>
       <p className="text-xs text-mute px-4 pb-2">Target FRT rata-rata ≤ {tg} mnt · target per channel tetap dipakai untuk % SLA.</p>
+      {d.desks && <div className="grid sm:grid-cols-2 gap-3 px-4 pb-3">{d.desks.map((x) => (
+        <div key={x.desk} className="rounded-xl bg-cream px-3 py-2">
+          <div className="text-xs text-mute font-semibold">{x.label}</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabnum mt-0.5">
+            <span><b>{x.contact}</b> case</span><span>FRT <b>{fmtMin(x.frt)}</b></span><span>SLA <b>{fmtPct(x.slaResponse)}</b></span><span>Same-day <b>{fmtPct(x.sameDay)}</b></span><span>Open <b>{x.open}</b></span>
+          </div>
+        </div>))}</div>}
       <table className="w-full text-sm">
-        <thead className="text-left text-mute"><tr>{['Member', 'Dibalas', 'FRT rata-rata', 'Median', 'Tunggu (kalender)', '% SLA', 'Telat', 'Critical telat', 'FRT sistem', '% jam manual'].map((h) => <th key={h} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
+        <thead className="text-left text-mute"><tr>{['Member', 'Desk', 'Dibalas', 'FRT rata-rata', 'Median', 'Tunggu (kalender)', '% SLA', 'Telat', 'Critical telat', 'FRT sistem', '% jam manual'].map((h) => <th key={h} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
         <tbody>{rows.map((r) => (
           <tr key={r.name} className="border-t border-line tabnum">
-            <td className="px-3 py-2 font-semibold">{r.name}</td><td className="px-3 py-2">{r.count}</td>
+            <td className="px-3 py-2 font-semibold">{r.name}</td><td className="px-3 py-2 text-xs text-mute whitespace-nowrap">{r.desk === 'Online' ? 'Online / Marketplace' : r.desk === 'Offline' ? 'Offline' : '–'}</td><td className="px-3 py-2">{r.count}</td>
             <td className={`px-3 py-2 font-bold ${r.onTarget === false ? 'text-brick' : r.onTarget ? 'text-ok' : ''}`}>{fmtMin(r.avgFrt)}</td>
             <td className="px-3 py-2">{fmtMin(r.medianFrt)}</td><td className="px-3 py-2">{fmtMin(r.avgWait)}</td>
             <td className="px-3 py-2">{fmtPct(r.slaResponse)}</td><td className="px-3 py-2">{r.late}</td>
             <td className={`px-3 py-2 ${r.criticalLate ? 'text-brick font-bold' : ''}`}>{r.criticalLate}/{r.critical}</td>
             <td className="px-3 py-2">{fmtMin(r.frtSystem)}</td><td className="px-3 py-2">{fmtPct(r.manualPct)}</td>
           </tr>))}
-          {rows.length === 0 && <tr><td colSpan={10} className="px-3 py-4 text-mute">Belum ada case yang dibalas.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={11} className="px-3 py-4 text-mute">Belum ada case yang dibalas.</td></tr>}
         </tbody>
       </table>
     </Card>

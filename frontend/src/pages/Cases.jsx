@@ -9,7 +9,7 @@ export default function Cases() {
   const [sp, setSp] = useSearchParams()
   const p30 = presets().find((p) => p.key === '30')
   const [period, setPeriod] = useState({ from: sp.get('from') || p30.from, to: sp.get('to') || p30.to })
-  const [f, setF] = useState(() => Object.fromEntries(['status', 'level', 'jenis', 'subJenis', 'channel', 'outletId', 'area', 'picDept', 'kompensasi', 'agent', 'q', 'luarStandard', 'dataIssue'].map((k) => [k, sp.get(k) || ''])))
+  const [f, setF] = useState(() => Object.fromEntries(['status', 'level', 'jenis', 'subJenis', 'channel', 'outletId', 'area', 'picDept', 'kompensasi', 'agent', 'desk', 'q', 'luarStandard', 'dataIssue'].map((k) => [k, sp.get(k) || ''])))
   const [showF, setShowF] = useState(false)
   const now = useNow()
   const params = { from: period.from, to: period.to, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)) }
@@ -44,6 +44,7 @@ export default function Cases() {
           {sel('picDept', 'PIC Dept', masters.picDept)}
           {sel('kompensasi', 'Kompensasi', ['Apologize', 'Voucher', 'Replacement', 'Complimentary', 'Cover Pengobatan', 'Refund', 'Tidak Ada'])}
           {sel('agent', 'Agent', masters.agents)}
+          {sel('desk', 'Desk CS', [{ v: 'Online', l: 'CS Online / Marketplace' }, { v: 'Offline', l: 'CS Offline' }])}
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="w-5 h-5" checked={!!f.luarStandard} onChange={(e) => set('luarStandard', e.target.checked ? 'true' : '')} />Kompensasi di luar standard</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="w-5 h-5" checked={!!f.dataIssue} onChange={(e) => set('dataIssue', e.target.checked ? 'true' : '')} />Cek Data ≠ OK</label>
           {active > 0 && <Btn kind="link" onClick={() => { setF(Object.fromEntries(Object.keys(f).map((k) => [k, '']))); setSp({}) }}>Reset filter</Btn>}

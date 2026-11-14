@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from .auth import require, hash_pin, check_slot, email_ok, ROLE_SLOTS, ROLE_LABEL, public_user
 from .core import get_db, now, clean, Config, as_utc, log
 from .services import new_id, audit
+from . import standards as S
 
 router = APIRouter(prefix="/api")
 
@@ -57,6 +58,7 @@ class RegisterIn(BaseModel):
     role: str
     pin: str
     phone: Optional[str] = None
+    desk: Optional[str] = None
 
 
 _bucket = {}
@@ -99,6 +101,7 @@ async def register(body: RegisterIn, request: Request):
                                        {"$set": {"status": "replaced", "decidedAt": now()}})
     rid = new_id()
     r = {"id": rid, "name": name, "email": email, "role": body.role, "phone": (body.phone or "").strip() or None,
+         "desk": body.desk if (body.role == "CS Agent" and body.desk in S.DESKS) else None,
          "pinHash": hash_pin(body.pin), "createdAt": now(), "ip": request.client.host if request.client else None}
     if _mail_ready():
         from .jobs import send_email
@@ -182,7 +185,11 @@ async def approve(rid: str, body: dict | None = None, u=Depends(require("Admin")
     name = r["name"]
     if await db.users.find_one({"name": name}):
         name = f"{name} ({r['email'].split('@')[0]})"
+    desk = (body or {}).get("desk") or r.get("desk")
+    if desk and desk not in S.DESKS:
+        raise HTTPException(400, "Desk tidak dikenal.")
     x = {"id": new_id(), "name": name, "email": r["email"], "phone": r.get("phone"), "role": role, "areas": [],
+         "desk": desk if role == "CS Agent" else None,
          "pinHash": r["pinHash"], "active": True, "created": now(), "registrationId": rid}
     await db.users.insert_one(x)
     await db.registrations.update_one({"id": rid}, {"$set": {"status": "approved", "role": role, "decidedAt": now(),

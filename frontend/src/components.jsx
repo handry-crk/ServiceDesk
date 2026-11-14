@@ -34,6 +34,7 @@ export function CaseCard({ c, now, action }) {
         <div className="flex flex-wrap items-center gap-2 mb-1">
           <span className="font-bold">{c.caseId}</span><LevelBadge level={c.level} /><StatusBadge status={c.status} />
           <SlaChip c={c} now={now} />
+          {c.desk && <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-cream text-mute font-semibold">{c.desk === 'Online' ? 'Online' : 'Offline'}</span>}
           {!c.dataOk && <span className="text-xs text-warn font-semibold">⚠ Cek data</span>}
         </div>
         <div className="text-sm font-semibold">{c.subJenis} · {c.outletName}</div>

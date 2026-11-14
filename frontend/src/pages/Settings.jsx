@@ -95,7 +95,9 @@ function Target() {
         <div className="flex items-center justify-between mb-2"><h3 className="font-bold">Target FRT per channel (menit)</h3><Btn size="sm" onClick={() => save('channels', ch)}>Simpan</Btn></div>
         <div className="grid sm:grid-cols-3 gap-3">{ch.map((x, i) => (
           <div key={x.name} className="flex items-end gap-2"><Field label={x.name}><input className={c} inputMode="numeric" value={x.targetFrt} onChange={(e) => setCh(ch.map((y, j) => j === i ? { ...y, targetFrt: Number(e.target.value) || 0 } : y))} /></Field>
-            <label className="text-xs flex items-center gap-1 pb-2"><input type="checkbox" checked={x.countInSla} onChange={(e) => setCh(ch.map((y, j) => j === i ? { ...y, countInSla: e.target.checked } : y))} />SLA</label></div>))}</div>
+            <label className="text-xs flex items-center gap-1 pb-2"><input type="checkbox" checked={x.countInSla} onChange={(e) => setCh(ch.map((y, j) => j === i ? { ...y, countInSla: e.target.checked } : y))} />SLA</label>
+            <select className="h-9 mb-1 rounded-lg border border-line bg-white px-1 text-xs" title="Desk CS" value={x.desk || 'Offline'} onChange={(e) => setCh(ch.map((y, j) => j === i ? { ...y, desk: e.target.value } : y))}><option value="Online">Online</option><option value="Offline">Offline</option></select></div>))}</div>
+        <p className="text-xs text-mute mt-2">Desk: channel Online masuk antrean CS Online / Marketplace; toko Online Frozen selalu ke desk Online; selain itu CS Offline.</p>
       </Card>
       <Card className="p-4">
         <div className="flex items-center justify-between mb-2"><h3 className="font-bold">Jam operasional CS, notifikasi & integritas waktu</h3><Btn size="sm" onClick={() => save('settings', st)}>Simpan</Btn></div>
@@ -190,7 +192,7 @@ function Registrations({ onChange }) {
       <div className="space-y-2">{data?.rows.map((r) => (
         <div key={r.id} className="border border-line rounded-xl p-3 flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[200px]">
-            <div className="font-semibold">{r.name} <span className="text-xs font-normal text-mute">· {r.roleLabel}</span></div>
+            <div className="font-semibold">{r.name} <span className="text-xs font-normal text-mute">· {r.roleLabel}{r.desk ? ` · ${r.desk === 'Online' ? 'CS Online / Marketplace' : 'CS Offline'}` : ''}</span></div>
             <div className="text-sm text-mute">{r.email}{r.phone ? ` · ${r.phone}` : ''}</div>
             <div className="text-xs text-mute">{fmtDT(r.createdAt)} · {r.emailVerified ? 'email terverifikasi' : 'email belum diverifikasi (server email belum aktif)'}{r.decidedBy ? ` · diputuskan ${r.decidedBy}` : ''}{r.reason ? ` · ${r.reason}` : ''}</div>
           </div>
@@ -225,7 +227,7 @@ function Users() {
         <div className="overflow-x-auto"><table className="w-full text-sm"><tbody>{rows.map((u) => (
           <tr key={u.id} className={`border-t border-line ${u.active ? '' : 'opacity-50'}`}>
             <td className="p-2"><div className="font-semibold">{u.name}{u.locked && <span className="ml-2 text-xs text-brick">terkunci</span>}</div><div className="text-xs text-mute">{u.email || 'login dengan nama'}</div></td>
-            <td className="p-2">{u.roleLabel}</td><td className="p-2 text-xs text-mute">{u.areas.join(', ')}</td><td className="p-2">{u.active ? 'Aktif' : 'Nonaktif'}</td>
+            <td className="p-2">{u.roleLabel}{u.role === 'CS Agent' && <select className="block mt-1 h-8 rounded-lg border border-line bg-white px-2 text-xs" value={u.desk || ''} onChange={(e) => act(u, { desk: e.target.value || null }, 'Desk diubah')}><option value="">Desk belum diatur</option><option value="Online">CS Online / Marketplace</option><option value="Offline">CS Offline</option></select>}</td><td className="p-2 text-xs text-mute">{u.areas.join(', ')}</td><td className="p-2">{u.active ? 'Aktif' : 'Nonaktif'}</td>
             <td className="p-2 text-right space-x-1 whitespace-nowrap">
               <Btn size="sm" kind="ghost" onClick={() => { const p = prompt(`PIN baru 6 digit untuk ${u.name}`); if (p) act(u, { pin: p }, 'PIN direset') }}>Reset PIN</Btn>
               {u.locked && <Btn size="sm" kind="ghost" onClick={() => act(u, { unlock: true }, 'Kunci dibuka')}>Buka kunci</Btn>}
@@ -239,6 +241,7 @@ function Users() {
               const full = r.slots && r.used >= r.slots
               return <Chip key={r.role} active={nu.role === r.role} disabled={full} className={full ? 'opacity-50' : ''} onClick={() => setNu({ ...nu, role: r.role })}>{r.label}{r.slots ? ` (${r.used}/${r.slots})` : ''}</Chip>
             })}</div></Field>
+            {nu.role === 'CS Agent' && <Field label="Desk CS" hint="Menentukan antrean Inbox default."><div className="flex flex-wrap gap-2">{[['Online', 'CS Online / Marketplace'], ['Offline', 'CS Offline']].map(([k, l]) => <Chip key={k} active={nu.desk === k} onClick={() => setNu({ ...nu, desk: k })}>{l}</Chip>)}</div></Field>}
             {nu.role === 'Manager Area' && <Field label="Area"><div className="flex flex-wrap gap-2">{masters.areas.map((a) => <Chip key={a} active={nu.areas.includes(a)} onClick={() => setNu({ ...nu, areas: nu.areas.includes(a) ? nu.areas.filter((x) => x !== a) : [...nu.areas, a] })}>{a}</Chip>)}</div></Field>}
             <Field label="PIN awal (6 digit)"><input className={inputCls} inputMode="numeric" maxLength={6} value={nu.pin} onChange={(e) => setNu({ ...nu, pin: e.target.value.replace(/\D/g, '') })} /></Field>
             <Btn className="w-full" disabled={!nu.name || nu.pin.length !== 6} onClick={async () => { try { await api('/users', { method: 'POST', body: nu }); setNu(null); refresh(); notify('User dibuat') } catch (e) { notify(e.message, 'err') } }}>Simpan</Btn>

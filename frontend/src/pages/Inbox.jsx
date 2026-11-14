@@ -22,7 +22,8 @@ export default function Inbox() {
   const { can, notify, masters } = useApp()
   const nav = useNavigate()
   const now = useNow()
-  const { data, loading, error, reload } = useAsync(() => api('/inbox'), [])
+  const [desk, setDesk] = useState('')
+  const { data, loading, error, reload } = useAsync(() => api('/inbox', { params: { desk } }), [desk])
   const [triage, setTriage] = useState(null)
   const [sub, setSub] = useState('')
   const writer = can(...WRITERS)
@@ -58,6 +59,12 @@ export default function Inbox() {
         {writer && <Link to="/catat"><Btn>+ Catat komplain</Btn></Link>}
       </div>
 
+      <div className="flex flex-wrap gap-1 mb-4 bg-white border border-line rounded-xl p-1 w-fit">
+        {[['Online', 'CS Online / Marketplace'], ['Offline', 'CS Offline'], ['all', 'Semua']].map(([k, l]) => (
+          <button key={k} onClick={() => setDesk(k)} className={`px-3 min-h-[36px] rounded-lg text-sm font-semibold ${data.desk === k ? 'bg-brick text-white' : 'hover:bg-cream'}`}>
+            {l}{k !== 'all' && data.openByDesk?.[k] ? <span className={`ml-1.5 text-xs px-1.5 rounded-full ${data.desk === k ? 'bg-white text-brick' : 'bg-brick text-white'}`}>{data.openByDesk[k]}</span> : null}
+          </button>))}
+      </div>
       {data.timeRequests > 0 && <Link to="/integritas"><div className="mb-4 rounded-xl border-2 border-warn bg-[#FBF1DC] p-3 text-sm font-semibold">{data.timeRequests} pengajuan jam dibalas menunggu persetujuan Anda →</div></Link>}
       <Section title="Belum dibalas" count={data.open.length} tone={data.open.length ? 'bg-brick text-white' : ''}>
         {data.open.length === 0 && <Empty>Semua chat sudah dibalas. 👍</Empty>}

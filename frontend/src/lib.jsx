@@ -174,3 +174,6 @@ export function workMinutes(start, end, st = {}) {
   }
   return Math.round(total)
 }
+
+export const DESK_LABEL = { Online: 'CS Online / Marketplace', Offline: 'CS Offline' }
+export const deskLabel = (d) => DESK_LABEL[d] || d || '–'

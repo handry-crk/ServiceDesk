@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { api, useApp, useAsync, fmtDT, fmtMin, fmtRp, toLocalInput, fromLocalInput, WRITERS, LEAD, waNumber, waLink, surveyMessage, workMinutes } from '../lib.jsx'
+import { api, useApp, useAsync, fmtDT, fmtMin, fmtRp, toLocalInput, fromLocalInput, WRITERS, LEAD, waNumber, waLink, surveyMessage, workMinutes, deskLabel } from '../lib.jsx'
 import { Btn, Card, Chip, Field, Sheet, Skeleton, ErrorBox, LevelBadge, StatusBadge, inputCls } from '../ui.jsx'
 import { SlaChip, useNow, Combo, levelItemBadge, PhotoPick } from '../components.jsx'
 
@@ -99,7 +99,7 @@ export default function CaseDetail() {
           <h3 className="font-bold mb-2">Customer & sumber</h3>
           <Row k="Channel" v={c.channel} /><Row k="Brand" v={c.brand} /><Row k="Tipe" v={c.tipe} /><Row k="Valid" v={c.valid} />
           <Row k="No. pesanan" v={c.orderNo} /><Row k="Nama" v={c.customerName} /><Row k="No. HP" v={c.customerPhone} />
-          <Row k="CS agent" v={c.csAgent} /><Row k="Sumber" v={c.source} />
+          <Row k="Desk CS" v={deskLabel(c.desk) + (c.deskOverride ? ' (dipindah manual)' : '')} /><Row k="Dicatat oleh" v={c.csAgent} />{c.frBy && <Row k="Dibalas oleh" v={c.frBy} />}<Row k="Sumber" v={c.source} />
           {c.notes && <Row k="Catatan impor" v={c.notes} />}
           {c.surveyToken && writer && <div className="mt-3 space-y-1">
             <Btn size="sm" kind={c.surveySentAt ? 'ghost' : 'soft'} onClick={() => setSheet('survey')}>{c.surveySentAt ? 'Kirim ulang survei CSAT' : 'Kirim survei CSAT'}</Btn>
@@ -375,7 +375,7 @@ function TimeSheet({ open, onClose, c, onDone }) {
 function EditSheet({ open, onClose, c, masters, onDone, limited }) {
   const [b, setB] = useState({})
   const fz = c.outletType === 'online_frozen'
-  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
+  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, deskOverride: c.deskOverride || '', tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
   const subs = (masters?.subJenis || []).map((s) => ({ value: s.name, label: s.name, sub: s.contoh, keywords: s.keywords, level: s.level }))
   const outlets = (masters?.outlets || []).map((o) => ({ value: o.id, label: o.name, sub: o.area }))
   const set = (k) => (e) => setB({ ...b, [k]: e.target ? e.target.value : e })
@@ -395,6 +395,7 @@ function EditSheet({ open, onClose, c, masters, onDone, limited }) {
           <Field label="Tipe"><select className={inputCls} value={b.tipe} onChange={set('tipe')}>{masters?.tipe.map((x) => <option key={x}>{x}</option>)}</select></Field>
           <Field label="Komplain valid"><select className={inputCls} value={b.valid} onChange={set('valid')}><option>Y</option><option>N</option></select></Field>
           <Field label="PIC Dept"><select className={inputCls} value={b.picDept} onChange={set('picDept')}><option value="">–</option>{masters?.picDept.map((x) => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="Desk CS" hint="Otomatis dari channel & outlet. Ubah bila case harus ditangani desk lain."><select className={inputCls} value={b.deskOverride || ''} onChange={set('deskOverride')}><option value="">Otomatis ({deskLabel(c.deskOverride ? null : c.desk)})</option><option value="Online">CS Online / Marketplace</option><option value="Offline">CS Offline</option></select></Field>
           <Field label="No. pesanan"><input className={inputCls} value={b.orderNo || ''} onChange={set('orderNo')} /></Field>
           <Field label="Nama customer"><input className={inputCls} value={b.customerName || ''} onChange={set('customerName')} /></Field>
           <Field label="No. HP customer"><input className={inputCls} value={b.customerPhone || ''} onChange={set('customerPhone')} /></Field>

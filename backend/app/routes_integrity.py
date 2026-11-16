@@ -37,7 +37,7 @@ async def build_integrity(frm: str, to: str):
     rows = []
     for name in sorted(names):
         cs = groups.get(name, [])
-        resp = [c for c in cs if c.get("frRecordedAt")]
+        resp = [c for c in cs if c.get("frRecordedAt") or c.get("recordMode") == "rekap"]
         manual = [c for c in resp if c.get("frtManual")]
         log = [r for c in cs for r in (c.get("timeRequestLog") or [])]
         created = [c for c in cs if c.get("csAgent") == name and c.get("masukLagMin") is not None]
@@ -50,6 +50,8 @@ async def build_integrity(frm: str, to: str):
             "rescued": sum(1 for c in resp if c.get("slaRescued")),
             "frtReported": _avg([c.get("frtMin") for c in resp]), "frtSystem": _avg([c.get("frtSystemMin") for c in resp]),
             "lateEntry": len(late), "avgLag": _avg([c["masukLagMin"] for c in late]),
+            "rekap": sum(1 for c in resp if c.get("recordMode") == "rekap"),
+            "rekapChat": sum(1 for c in resp if c.get("timeEvidence") == "chat"),
             "approved": sum(1 for x in log if x["status"] == "approved"),
             "rejected": sum(1 for x in log if x["status"] == "rejected"),
             "pending": sum(1 for c in cs if c.get("timeRequest")),
@@ -67,7 +69,7 @@ async def build_integrity(frm: str, to: str):
         r["flags"] = flags
         rows.append(r)
     rows.sort(key=lambda r: (-len(r["flags"]), -(r["manualPct"] or 0)))
-    resp_all = [c for c in cases if c.get("frRecordedAt")]
+    resp_all = [c for c in cases if c.get("frRecordedAt") or c.get("recordMode") == "rekap"]
     total = {
         "responded": len(resp_all), "manual": sum(1 for c in resp_all if c.get("frtManual")),
         "manualPct": _rate(sum(1 for c in resp_all if c.get("frtManual")), len(resp_all)),
@@ -109,14 +111,14 @@ async def create_audit(week_start: date, by: str):
     ctx = await load_ctx()
     n = ctx["settings"]["auditSamplePerCs"]
     cases = [c for c in await cases_in_period(ws.isoformat(), we.isoformat(), None, None, None, ctx)
-             if c.get("waktuFirstResponse") and c.get("source", "manual") == "manual"]
+             if c.get("waktuFirstResponse") and c.get("source", "manual") in ("manual", "rekap")]
     by_cs = defaultdict(list)
     for c in cases:
         by_cs[_resp_by(c)].append(c)
     rnd = random.SystemRandom()
     items = []
     for cs, lst in sorted(by_cs.items()):
-        manual = [c for c in lst if c.get("frtManual")]
+        manual = [c for c in lst if c.get("frtManual") or c.get("timeEvidence") == "screenshot"]
         pick = rnd.sample(manual, min(len(manual), (n + 1) // 2))
         rest = [c for c in lst if c not in pick]
         pick += rnd.sample(rest, min(len(rest), n - len(pick)))

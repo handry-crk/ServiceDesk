@@ -150,6 +150,7 @@ def compute_case(c: dict, ctx: dict) -> dict:
     otype = c.get("outletType") or outlet.get("type") or "gerobak"
     c["outletType"] = otype
     c["outletName"] = outlet.get("name") or c.get("outletName")
+    c["outletPending"] = bool(outlet.get("pending"))
     c["area"] = outlet.get("area") or c.get("area") or "Belum diatur"
     c["jenis"] = sj["jenis"] if sj else None
     c["levelStandard"] = sj["level"] if sj else None
@@ -287,6 +288,8 @@ def data_issues(c, pj_auto):
         iss.append("Info: Kompensasi di luar standard")
     if c.get("timeRequest"):
         iss.append("Info: Jam dibalas menunggu persetujuan")
+    if c.get("outletPending"):
+        iss.append("Outlet menunggu verifikasi")
     if c.get("auditResult") == "tidak":
         iss.append("Audit: jam tidak cocok dengan chat")
     return iss

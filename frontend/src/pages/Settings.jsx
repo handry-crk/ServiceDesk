@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, useApp, useAsync, fmtDT, fmtD, fmtNum, download, LEAD } from '../lib.jsx'
 import { Btn, Card, Chip, ErrorBox, Field, Sheet, Skeleton, inputCls, LevelBadge } from '../ui.jsx'
+import { Combo } from '../components.jsx'
 
 const TABS = [['standard', 'Standard CRM.STD.001'], ['target', 'Target & SLA'], ['outlet', 'Outlet'], ['user', 'User'], ['transaksi', 'Transaksi bulanan'], ['impor', 'Impor sheet lama'], ['sistem', 'Sistem']]
 const c = inputCls + ' !min-h-[36px] text-sm'
@@ -130,6 +131,37 @@ function Target() {
   )
 }
 
+function PendingOutlets() {
+  const { masters, loadMasters, notify } = useApp()
+  const pend = masters.outlets.filter((o) => o.pending)
+  const [st, setSt] = useState({})
+  if (!pend.length) return null
+  const others = masters.outlets.filter((o) => !o.pending).map((o) => ({ value: o.id, label: o.name, sub: o.area, keywords: (o.aliases || []).join(' ') }))
+  const go = async (o, kind) => {
+    const s = st[o.id] || {}
+    try {
+      if (kind === 'merge') { const r = await api(`/outlets/${o.id}/merge`, { method: 'POST', body: { targetId: s.target } }); notify(`${o.name} digabung ke ${r.target.name} (${r.moved} case dipindah)`) }
+      else { await api(`/outlets/${o.id}/verify`, { method: 'POST', body: { area: s.area || o.area, type: s.type || o.type, name: s.name || o.name } }); notify(`${o.name} dikonfirmasi`) }
+      await loadMasters()
+    } catch (e) { notify(e.message, 'err') }
+  }
+  return (
+    <div className="mb-4 rounded-xl border-2 border-warn bg-[#FBF1DC] p-3">
+      <div className="font-bold mb-1">{pend.length} outlet baru dari CS menunggu verifikasi</div>
+      <p className="text-xs text-mute mb-2">Konfirmasi bila outlet memang baru (lengkapi area & tipe), atau gabungkan bila sebenarnya outlet yang sudah ada — case-nya ikut dipindah dan nama yang diketik CS menjadi alias.</p>
+      <div className="space-y-2">{pend.map((o) => { const s = st[o.id] || {}; const upd = (k, v) => setSt({ ...st, [o.id]: { ...s, [k]: v } }); return (
+        <div key={o.id} className="bg-white rounded-xl border border-line p-3 grid gap-2 md:grid-cols-[1.2fr_1fr_1fr_auto] items-end">
+          <Field label={`Nama · diketik ${o.requestedBy || '-'}`}><input className={inputCls + ' !min-h-[38px]'} defaultValue={o.name} onChange={(e) => upd('name', e.target.value)} /></Field>
+          <Field label="Area"><select className={inputCls + ' !min-h-[38px]'} defaultValue={o.area} onChange={(e) => upd('area', e.target.value)}>{masters.areas.map((x) => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="Tipe"><select className={inputCls + ' !min-h-[38px]'} defaultValue={o.type} onChange={(e) => upd('type', e.target.value)}>{['gerobak', 'kios', 'central_kitchen', 'online_frozen'].map((x) => <option key={x}>{x}</option>)}</select></Field>
+          <Btn size="sm" kind="ok" onClick={() => go(o, 'verify')}>Konfirmasi</Btn>
+          <div className="md:col-span-3"><Combo items={others} value={s.target || ''} onChange={(v) => upd('target', v)} placeholder="…atau gabungkan ke outlet yang sudah ada" /></div>
+          <Btn size="sm" kind="ghost" disabled={!s.target} onClick={() => go(o, 'merge')}>Gabungkan</Btn>
+        </div>) })}</div>
+    </div>
+  )
+}
+
 function Outlets() {
   const { masters, loadMasters, notify } = useApp()
   const [q, setQ] = useState('')
@@ -145,9 +177,10 @@ function Outlets() {
   return (
     <Card className="p-4">
       <div className="flex gap-2 mb-3"><input className={inputCls} placeholder="Cari outlet/area" value={q} onChange={(e) => setQ(e.target.value)} /><Btn onClick={() => setEdit({ name: '', type: 'gerobak', area: 'Belum diatur', brand: 'Cimol Bojot AA', aliases: '', active: true })}>+ Outlet</Btn></div>
+      <PendingOutlets />
       <div className="text-xs text-mute mb-2">{masters.outlets.filter((o) => o.area === 'Belum diatur').length} outlet belum punya area — isi agar filter area & akses Manager Area berjalan.</div>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-mute"><tr>{['Nama', 'Tipe', 'Area', 'Brand', 'Alias', 'Aktif', ''].map((h) => <th key={h} className="p-2">{h}</th>)}</tr></thead>
-        <tbody>{rows.map((o) => <tr key={o.id} className="border-t border-line"><td className="p-2 font-medium">{o.name}</td><td className="p-2">{o.type}</td><td className={`p-2 ${o.area === 'Belum diatur' ? 'text-warn' : ''}`}>{o.area}</td><td className="p-2">{o.brand}</td><td className="p-2 text-xs text-mute">{(o.aliases || []).join(', ')}</td><td className="p-2">{o.active ? '✓' : '–'}</td><td className="p-2"><Btn size="sm" kind="ghost" onClick={() => setEdit({ ...o, aliases: (o.aliases || []).join(', ') })}>Ubah</Btn></td></tr>)}</tbody></table></div>
+        <tbody>{rows.map((o) => <tr key={o.id} className="border-t border-line"><td className="p-2 font-medium">{o.name}{o.pending && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-[#FBF1DC] text-[#7A5410] font-bold">menunggu verifikasi</span>}</td><td className="p-2">{o.type}</td><td className={`p-2 ${o.area === 'Belum diatur' ? 'text-warn' : ''}`}>{o.area}</td><td className="p-2">{o.brand}</td><td className="p-2 text-xs text-mute">{(o.aliases || []).join(', ')}</td><td className="p-2">{o.active ? '✓' : '–'}</td><td className="p-2"><Btn size="sm" kind="ghost" onClick={() => setEdit({ ...o, aliases: (o.aliases || []).join(', ') })}>Ubah</Btn></td></tr>)}</tbody></table></div>
       <Sheet open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? 'Ubah outlet' : 'Tambah outlet'}>
         {edit && <div className="space-y-3">
           <Field label="Nama"><input className={inputCls} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>

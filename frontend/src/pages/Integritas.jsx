@@ -79,10 +79,10 @@ export function IntegrityBody({ d, compact }) {
       </div>
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-brick text-white text-left"><tr>{['CS', 'Dibalas', '% manual', 'Rata² mundur', 'SLA lolos krn manual', 'FRT lapor / sistem', 'Telat catat', 'Pengajuan ✓ / ✗', 'Audit ✓ / ✗', 'Perhatian'].map((h) => <th key={h} className="px-3 py-2 whitespace-nowrap">{h}</th>)}</tr></thead>
+          <thead className="bg-brick text-white text-left"><tr>{['CS', 'Dibalas', 'Rekap (bukti chat)', '% manual', 'Rata² mundur', 'SLA lolos krn manual', 'FRT lapor / sistem', 'Telat catat', 'Pengajuan ✓ / ✗', 'Audit ✓ / ✗', 'Perhatian'].map((h) => <th key={h} className="px-3 py-2 whitespace-nowrap">{h}</th>)}</tr></thead>
           <tbody>{d.rows.map((r) => (
             <tr key={r.name} className={`border-t border-line tabnum ${r.flags.length ? 'bg-[#FBF1DC]/60' : ''}`}>
-              <td className="px-3 py-2 font-semibold">{r.name}</td><td className="px-3 py-2">{r.responded}</td>
+              <td className="px-3 py-2 font-semibold">{r.name}</td><td className="px-3 py-2">{r.responded}</td><td className="px-3 py-2">{r.rekap ? `${r.rekap} (${r.rekapChat} chat)` : '–'}</td>
               <td className={`px-3 py-2 ${r.manualPct > s.manualAlertPct ? 'text-brick font-bold' : ''}`}>{fmtPct(r.manualPct)}</td>
               <td className="px-3 py-2">{fmtMin(r.avgBackdate)}</td><td className={`px-3 py-2 ${r.rescued ? 'text-brick font-bold' : ''}`}>{r.rescued}</td>
               <td className="px-3 py-2 whitespace-nowrap">{fmtMin(r.frtReported)} / {fmtMin(r.frtSystem)}</td>
@@ -91,7 +91,7 @@ export function IntegrityBody({ d, compact }) {
               <td className="px-3 py-2">{r.auditOk} / <span className={r.auditBad ? 'text-brick font-bold' : ''}>{r.auditBad}</span></td>
               <td className="px-3 py-2 text-xs">{r.flags.length ? r.flags.join('; ') : <span className="text-ok">OK</span>}</td>
             </tr>))}
-            {d.rows.length === 0 && <tr><td colSpan={10} className="px-3 py-4 text-mute">Belum ada case di periode ini.</td></tr>}
+            {d.rows.length === 0 && <tr><td colSpan={11} className="px-3 py-4 text-mute">Belum ada case di periode ini.</td></tr>}
           </tbody>
         </table>
       </Card>

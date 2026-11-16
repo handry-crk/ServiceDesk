@@ -144,11 +144,13 @@ def test_time_rules_and_formulas(ctx):
 def test_open_case_same_day_not_stale(ctx):
     c, H, o = ctx
     y = datetime.now(WIB) - timedelta(days=1)
+    while y.weekday() == 6:  # Minggu libur CS → same-day dihitung dari hari kerja berikutnya
+        y -= timedelta(days=1)
     k = mk(c, H, o, subJenis="Hospitality", outletId=o["Kosambi"], waktuMasuk=y.replace(hour=12, minute=0).isoformat()).json()
     d = y.date().isoformat()
     dash = c.get("/api/dashboard", params={"from": d, "to": d}, headers=H).json()
     row = next(x for x in dash["outlets"] if x["name"] == "Kosambi")
-    assert row["sameDay"] == 0  # case kemarin yang belum resolved dihitung tidak same-day
+    assert row["sameDay"] == 0  # case hari kerja kemarin yang belum resolved dihitung tidak same-day
 
 
 def test_level_change_and_subjenis_edit(ctx):
@@ -627,3 +629,51 @@ def test_cs_desks(ctx):
     dk = {x["desk"]: x for x in d["desks"]}
     assert dk["Online"]["contact"] >= 3 and "Offline" in dk
     assert all(x["desk"] == "Online" for x in c.get("/api/cases", params={"desk": "Online", "from": t, "to": t}, headers=H).json()["items"]) if isinstance(c.get("/api/cases", params={"desk": "Online"}, headers=H).json(), dict) else True
+
+
+CHAT = """[10.02, 03/11/2026] +62 812-1111-2222: Kak cimol saya kurang 2, pesan 10 dapat 8
+[10.04, 03/11/2026] CS Cimol Bojot AA: Mohon maaf kak, boleh foto struknya?
+[10.06, 03/11/2026] +62 812-1111-2222: ini kak
+[10.30, 03/11/2026] CS Cimol Bojot AA: Baik kak, kami ganti porsi baru ya"""
+
+
+def test_rekap_from_whatsapp(ctx):
+    c, H, o = ctx
+    A = login(c, "Agen", "123123")
+    L = login(c, "Lead", "123123")
+    p = c.post("/api/wa/parse", json={"text": CHAT}, headers=A).json()
+    assert p["messages"] == 4 and p["customerPhone"] == "+62 812-1111-2222"
+    assert p["masuk"].startswith("2026-11-03T10:02") and p["dibalas"].startswith("2026-11-03T10:04")
+    assert c.post("/api/wa/parse", json={"text": "halo kak"}, headers=A).status_code == 400
+    # outlet belum terdaftar → diketik CS, langsung bisa dipakai
+    no = c.post("/api/outlets/quick", json={"name": "Gerobak  Pasar Minggu Baru"}, headers=A).json()
+    assert no["pending"] is True and no["existing"] is False
+    assert c.post("/api/outlets/quick", json={"name": "gerobak pasar minggu baru"}, headers=A).json()["existing"] is True
+    body = {"channel": "WhatsApp", "outletId": no["id"], "subJenis": "Missing Item", "ringkasan": p["customerText"],
+            "waktuMasuk": p["masuk"], "waktuFirstResponse": p["dibalas"], "waktuResolved": wib_iso(2026, 11, 3, 10, 30),
+            "rootCause": "lupa masuk", "kompensasiKey": "maj-replacement", "closed": True, "followUpUlang": "N",
+            "chatText": CHAT, "customerPhone": p["customerPhone"], "force": True}
+    r = c.post("/api/cases/rekap", json=body, headers=A).json()
+    assert r["status"] == "Closed" and r["frtMin"] == 2 and r["timeEvidence"] == "chat" and not r.get("frtManual")
+    assert r["voucherCode"].startswith("CMP-RP") and "Outlet menunggu verifikasi" in r["dataIssues"]
+    assert r["resolutionMin"] == 28 and r["source"] == "rekap"
+    # jam diubah dari chat tanpa screenshot → ditolak; dengan screenshot → tersimpan sebagai manual
+    b2 = {**body, "waktuFirstResponse": wib_iso(2026, 11, 3, 10, 3), "waktuResolved": None, "closed": False,
+          "rootCause": None, "kompensasiKey": None, "ringkasan": "uji manual"}
+    assert c.post("/api/cases/rekap", json=b2, headers=A).status_code == 400
+    r2 = c.post("/api/cases/rekap", json={**b2, "photo": "/u/x.jpg"}, headers=A).json()
+    assert r2["timeEvidence"] == "screenshot" and r2["frtManual"] is True and r2["status"] == "Responded"
+    # selesai tanpa root cause → ditolak
+    assert c.post("/api/cases/rekap", json={**body, "rootCause": "", "ringkasan": "x2"}, headers=A).status_code == 400
+    assert c.get("/api/rekap/mine", headers=A).status_code == 200
+    # CRM Supervisor gabungkan outlet ke yang sudah ada → case ikut pindah, nama jadi alias
+    m = c.post(f"/api/outlets/{no['id']}/merge", json={"targetId": o["Jagakarsa"]}, headers=L).json()
+    assert m["moved"] == 2
+    k = c.get(f"/api/cases/{r['caseId']}", headers=L).json()
+    assert k["outletName"] == "Jagakarsa" and "Outlet menunggu verifikasi" not in k["dataIssues"]
+    assert c.post("/api/outlets/quick", json={"name": "Gerobak Pasar Minggu Baru"}, headers=A).json()["id"] == o["Jagakarsa"]
+    # verifikasi outlet baru
+    n2 = c.post("/api/outlets/quick", json={"name": "Kios Uji Verifikasi"}, headers=A).json()
+    assert c.post(f"/api/outlets/{n2['id']}/verify", json={"area": "Depok"}, headers=A).status_code == 403
+    v = c.post(f"/api/outlets/{n2['id']}/verify", json={"area": "Depok"}, headers=L).json()
+    assert v["pending"] is False and v["area"] == "Depok"

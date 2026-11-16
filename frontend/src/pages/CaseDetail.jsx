@@ -185,7 +185,7 @@ function SurveySheet({ open, onClose, c, notify, onSent }) {
   )
 }
 
-function VoucherMsg({ c, notify, masters }) {
+export function VoucherMsg({ c, notify, masters }) {
   const v = c.voucher
   const days = masters?.settings?.voucherExpiryDays || 30
   const until = v.tanggalDiterbitkan && !v.noExpiry ? new Date(new Date(v.tanggalDiterbitkan).getTime() + days * 864e5).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : null

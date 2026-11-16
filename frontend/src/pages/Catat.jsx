@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, useApp, toLocalInput, fromLocalInput, compressImage, WRITERS, LEAD } from '../lib.jsx'
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge } from '../ui.jsx'
 import { Combo, levelItemBadge } from '../components.jsx'
+import { ModeTabs } from './Rekap.jsx'
 
 const FROZEN_KEYS = ['produk', 'ekspedisi', 'noResi', 'kodeProduksi', 'qtyPesan', 'qtyDiterima']
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
@@ -99,7 +100,8 @@ export default function Catat() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-extrabold mb-1">Catat komplain</h1>
+      <ModeTabs live />
+      <h1 className="text-2xl font-extrabold mb-1">Catat komplain (real time)</h1>
       <p className="text-sm text-mute mb-4">5 isian saja (+ No. Pesanan untuk GoFood, GrabFood, ShopeeFood & marketplace). Level, PJ, cost center, dan target SLA terisi otomatis.</p>
       <Card className="p-4 space-y-5">
         <Field label="Channel" required>

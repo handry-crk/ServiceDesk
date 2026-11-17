@@ -677,3 +677,42 @@ def test_rekap_from_whatsapp(ctx):
     assert c.post(f"/api/outlets/{n2['id']}/verify", json={"area": "Depok"}, headers=A).status_code == 403
     v = c.post(f"/api/outlets/{n2['id']}/verify", json={"area": "Depok"}, headers=L).json()
     assert v["pending"] is False and v["area"] == "Depok"
+
+
+def test_bulk_input(ctx):
+    c, H, o = ctx
+    A = login(c, "Agen", "123123")
+    head = "Tanggal\tJam Masuk\tJam Dibalas\tJam Selesai\tChannel\tOutlet\tSub Jenis\tRingkasan\tRoot Cause\tKompensasi\tNilai (Rp)\tStatus\tNama Customer\tNo HP\tNo Pesanan"
+    rows = [
+        "02/11/2026\t10.02\t10.05\t10.30\tWhatsApp\tJagakarsa\tMissing Item\tkurang 2 bulk\tKetelitian Crew\tReplacement\t\tSelesai\tBudi\t081211112222\t",
+        "02/11/2026\t13:40\t13:44\t\tgofood\tKios Margonda\tSpeed of Service\tlama bulk\t\t\t\tDiproses\t\t\tF-77",
+        "02/11/2026\t23.50\t00.10\t\tWhatsApp\tGerobak Bulk Baru\tHospitality\tjutek bulk\tx\tApologize\t\tClosed\t\t\t",
+        "02/11/2026\t25.99\t10.05\t\tWhatsApp\tJagakarsa\tTidak Ada Sub\tsalah\t\t\t\t\t\t\t",
+        "02/11/2026\t09.00\t09.03\t09.30\tWhatsApp\tJagakarsa\tMissing Item\tselesai tanpa komp\t\t\t\tSelesai\t\t\t",
+    ]
+    text = "\n".join([head] + rows)
+    p = c.post("/api/cases/bulk", json={"text": text}, headers=A).json()
+    assert p["dryRun"] and p["summary"] == {"rows": 5, "ok": 3, "error": 2, "warning": 1, "dup": 0}, p["summary"]
+    r = p["rows"]
+    assert r[0]["data"]["kompensasiKey"] == "maj-replacement" and r[0]["data"]["frtMin"] == 3
+    assert r[1]["data"]["channel"] == "GoFood" and r[1]["data"]["status"] == "Diproses"
+    assert r[2]["data"]["dibalas"].startswith("2026-11-03T00:10") and any("belum terdaftar" in w for w in r[2]["warnings"])
+    assert any("Jam Masuk" in e for e in r[3]["errors"]) and any("Sub Jenis" in e for e in r[3]["errors"])
+    assert any("Kompensasi kosong" in e for e in r[4]["errors"])
+    s = c.post("/api/cases/bulk", json={"text": text, "dryRun": False}, headers=A).json()
+    assert len(s["created"]) == 3 and not s["failed"] and len(s["errorRows"]) == 2
+    k = c.get(f"/api/cases/{s['created'][0]['caseId']}", headers=A).json()
+    assert k["status"] == "Resolved" and k["timeEvidence"] == "bulk" and k["frtManual"] is True and k["voucherCode"].startswith("CMP-RP")
+    k3 = c.get(f"/api/cases/{s['created'][2]['caseId']}", headers=A).json()
+    assert k3["status"] == "Closed" and k3["outletPending"] is True
+    # tempel ulang → terdeteksi duplikat dan dilewati
+    s2 = c.post("/api/cases/bulk", json={"text": text, "dryRun": False}, headers=A).json()
+    assert s2["skippedDup"] == 3 and not s2["created"]
+    # tanpa header (urutan template) & template bisa diunduh
+    p = c.post("/api/cases/bulk", json={"text": "04/11/2026\t10.02\t10.05\t\tWA\tJagakarsa\tHospitality\ttanpa header"}, headers=A).json()
+    assert p["summary"]["ok"] == 1
+    t = c.get("/api/cases/bulk/template", headers=A)
+    assert t.status_code == 200 and len(t.content) > 3000
+    f = c.post("/api/cases/bulk/file", files={"file": ("t.xlsx", t.content)}, headers=A).json()
+    assert c.post("/api/cases/bulk", json={"text": f["text"]}, headers=A).json()["summary"]["ok"] == 2
+    assert c.post("/api/cases/bulk", json={"text": text}, headers=login(c, "Lihat", "123123")).status_code == 403

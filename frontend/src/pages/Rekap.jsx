@@ -196,18 +196,19 @@ export default function Rekap() {
           <div className="divide-y divide-line">{mine.data.map((c) => (
             <Link key={c.caseId} to={'/case/' + c.caseId} className="flex flex-wrap items-center gap-2 py-2 text-sm">
               <span className="font-bold">{c.caseId}</span><LevelBadge level={c.level} /><StatusBadge status={c.status} />
-              <span className="truncate">{c.subJenis} · {c.outletName}</span><span className="ml-auto text-xs text-mute">FRT {fmtMin(c.frtMin)} · {c.timeEvidence === 'chat' ? 'chat' : 'screenshot'}</span>
+              <span className="truncate">{c.subJenis} · {c.outletName}</span><span className="ml-auto text-xs text-mute">FRT {fmtMin(c.frtMin)} · {c.timeEvidence === 'chat' ? 'chat' : c.timeEvidence === 'bulk' ? 'bulk' : 'screenshot'}</span>
             </Link>))}</div>}
       </Card>
     </div>
   )
 }
 
-export function ModeTabs({ live }) {
+export function ModeTabs({ live, mode }) {
+  const cur = mode || (live ? 'live' : 'rekap')
+  const tabs = [['rekap', '/catat', 'Rekap dari WhatsApp'], ['bulk', '/catat?mode=bulk', 'Bulk input'], ['live', '/catat?mode=live', 'Catat real time']]
   return (
-    <div className="flex gap-1 mb-4 bg-white border border-line rounded-xl p-1 w-fit">
-      <Link to="/catat" className={`px-3 md:px-4 min-h-[38px] flex items-center rounded-lg text-sm font-semibold ${!live ? 'bg-brick text-white' : 'hover:bg-cream'}`}>Rekap dari WhatsApp</Link>
-      <Link to="/catat?mode=live" className={`px-3 md:px-4 min-h-[38px] flex items-center rounded-lg text-sm font-semibold ${live ? 'bg-brick text-white' : 'hover:bg-cream'}`}>Catat real time</Link>
+    <div className="flex flex-wrap gap-1 mb-4 bg-white border border-line rounded-xl p-1 w-fit">
+      {tabs.map(([k, to, l]) => <Link key={k} to={to} className={`px-3 md:px-4 min-h-[38px] flex items-center rounded-lg text-sm font-semibold ${cur === k ? 'bg-brick text-white' : 'hover:bg-cream'}`}>{l}</Link>)}
     </div>
   )
 }

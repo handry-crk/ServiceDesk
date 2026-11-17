@@ -118,7 +118,7 @@ async def create_audit(week_start: date, by: str):
     rnd = random.SystemRandom()
     items = []
     for cs, lst in sorted(by_cs.items()):
-        manual = [c for c in lst if c.get("frtManual") or c.get("timeEvidence") == "screenshot"]
+        manual = [c for c in lst if c.get("frtManual") or c.get("timeEvidence") in ("screenshot", "bulk")]
         pick = rnd.sample(manual, min(len(manual), (n + 1) // 2))
         rest = [c for c in lst if c not in pick]
         pick += rnd.sample(rest, min(len(rest), n - len(pick)))

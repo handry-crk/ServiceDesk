@@ -145,6 +145,10 @@ def _same_min(a, b):
 
 @router.post("/cases/rekap")
 async def rekap(body: RekapIn, u=Depends(require(*WRITERS))):
+    return await do_rekap(body, u)
+
+
+async def do_rekap(body: RekapIn, u, evidence_override=None):
     from .routes_cases import CaseIn, create_case, ResolveIn, resolve, out_case
     masuk, fr = parse_iso(body.waktuMasuk), parse_iso(body.waktuFirstResponse)
     res = parse_iso(body.waktuResolved) if body.waktuResolved else None
@@ -168,6 +172,8 @@ async def rekap(body: RekapIn, u=Depends(require(*WRITERS))):
         a = analyze(chat, body.chatCustomer)
         if _same_min(a.get("masuk"), masuk) and _same_min(a.get("dibalas"), fr):
             evidence = "chat"
+    if not evidence and evidence_override:
+        evidence = evidence_override
     if not evidence:
         if not body.photo:
             raise HTTPException(400, "Jam masuk/dibalas berbeda dengan chat (atau chat tidak ditempel): "
@@ -178,7 +184,8 @@ async def rekap(body: RekapIn, u=Depends(require(*WRITERS))):
                 waktuMasuk=body.waktuMasuk, tipe=body.tipe, orderNo=body.orderNo, customerName=body.customerName,
                 customerPhone=body.customerPhone, photos=(body.photos or [])[:3], produk=body.produk,
                 kodeProduksi=body.kodeProduksi, ekspedisi=body.ekspedisi, noResi=body.noResi, qtyPesan=body.qtyPesan,
-                qtyDiterima=body.qtyDiterima, source="rekap", waktuMasukReason="Rekap dari WhatsApp", force=body.force)
+                qtyDiterima=body.qtyDiterima, source="rekap",
+                waktuMasukReason="Bulk input" if evidence == "bulk" else "Rekap dari WhatsApp", force=body.force)
     created = await create_case(ci, u)
     cid = created["caseId"]
     c = await get_case_or_404(cid)

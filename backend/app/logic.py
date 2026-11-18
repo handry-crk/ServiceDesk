@@ -164,7 +164,9 @@ def compute_case(c: dict, ctx: dict) -> dict:
 
     # cost center
     sname = c.get("subJenis")
-    frozen = otype == "online_frozen"
+    # frozen = lini produk Cimol Frozen: dijual di toko marketplace (Online Frozen) maupun channel lain
+    frozen = otype == "online_frozen" or bool(c.get("produkFrozen"))
+    c["frozen"] = frozen
     if lvl == "Minor":
         cc = "Factory" if (frozen and sname == "Kesalahan Kemasan") else "Operasional"
     elif lvl == "Major":
@@ -279,7 +281,7 @@ def data_issues(c, pj_auto):
         iss.append("Closed tanpa Follow-up Y/N")
     if needs_cost_final(c) and c.get("waktuClosed") and not c.get("costCenterFinal") and c.get("source") != "import":
         iss.append("Critical tanpa cost center final")
-    if c.get("outletType") == "online_frozen" and c.get("subJenis") in NEEDS_BATCH and not c.get("kodeProduksi") \
+    if c.get("frozen") and c.get("subJenis") in NEEDS_BATCH and not c.get("kodeProduksi") \
             and c.get("source") != "import":
         iss.append("Kode produksi belum diisi")
     if c.get("possibleDuplicateOf"):

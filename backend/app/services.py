@@ -63,7 +63,7 @@ async def seed_if_empty():
     # migrasi: desk CS per channel (Online / Offline), lalu hitung ulang case lama agar punya desk
     async for ch in db.channels.find({"desk": {"$exists": False}}):
         await db.channels.update_one({"_id": ch["_id"]}, {"$set": {"desk": S.default_desk(ch["name"])}})
-    if await db.cases.count_documents({"desk": {"$exists": False}}):
+    if await db.cases.count_documents({"$or": [{"desk": {"$exists": False}}, {"frozen": {"$exists": False}}]}):
         await recompute_all()
     # migrasi: tanda & contoh khas frozen pada sub jenis (kata kunci ditambahkan, tidak menimpa)
     for i, (name, contoh, kw) in enumerate(S.FROZEN_SUBS):

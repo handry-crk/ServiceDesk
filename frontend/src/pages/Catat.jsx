@@ -5,7 +5,7 @@ import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge } from '../ui.js
 import { Combo, levelItemBadge, subJenisItems, FrozenSubChips } from '../components.jsx'
 import { ModeTabs } from './Rekap.jsx'
 
-const FROZEN_KEYS = ['produk', 'ekspedisi', 'noResi', 'kodeProduksi', 'qtyPesan', 'qtyDiterima']
+const FROZEN_KEYS = ['produkFrozen', 'produk', 'ekspedisi', 'noResi', 'kodeProduksi', 'qtyPesan', 'qtyDiterima']
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
 
 export default function Catat() {
@@ -18,7 +18,7 @@ export default function Catat() {
   const [waktu, setWaktu] = useState(null) // null = sekarang
   const [lagReason, setLagReason] = useState('')
   const [more, setMore] = useState(false)
-  const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
+  const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
   const [photos, setPhotos] = useState([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -41,7 +41,8 @@ export default function Catat() {
   const level = sj?.level
   const pj = masters?.penanggungJawab?.[level] || '-'
   const tfrt = level === 'Critical' ? Math.min(ch?.targetFrt || 5, masters?.criticalFrt || 30) : ch?.targetFrt
-  const frozen = outlet?.type === 'online_frozen'
+  const frozenStore = outlet?.type === 'online_frozen'
+  const frozen = frozenStore || !!extra.produkFrozen
   const subs = subJenisItems(masters, frozen)
   const cc = !level ? '-' : level === 'Minor' ? (frozen && subJenis === 'Kesalahan Kemasan' ? 'Factory' : 'Operasional') : level === 'Major' ? (frozen ? 'Team Frozen' : 'Operasional') : level === 'Critical' ? ((['Kontaminasi', 'Keracunan', 'Undercooked'].includes(subJenis) || (frozen && subJenis === 'Penurunan Mutu (tidak dapat dikonsumsi)')) ? 'Factory/Operasional (cek root cause)' : 'Operasional') : 'Belum Diatur'
   const lagMax = masters?.settings?.masukLagReasonMin ?? 30
@@ -86,7 +87,7 @@ export default function Catat() {
         label: 'Sudah dibalas', fn: async () => { await api(`/cases/${c.caseId}/respond`, { method: 'POST' }); notify(`${c.caseId} ditandai sudah dibalas`) },
       })
       setOutletId(''); setSubJenis(''); setRingkasan(''); setWaktu(null); setLagReason(''); setPhotos([]); setDup(null)
-      setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
+      setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
       if (c.level === 'Critical') nav('/case/' + c.caseId)
     } catch (e) {
       if (e.status === 409) setDup(e.detail)
@@ -111,6 +112,7 @@ export default function Catat() {
           ))}</div>
         </Field>
         <Field label="Outlet" required><Combo items={outlets} value={outletId} onChange={setOutletId} placeholder="Ketik nama outlet…" recent={recentOutlets} /></Field>
+        {outletId && !frozenStore && <label className="flex items-start gap-2 text-sm rounded-xl border border-line p-3 bg-white"><input type="checkbox" className="w-5 h-5 mt-0.5" checked={!!extra.produkFrozen} onChange={(e) => setExtra({ ...extra, produkFrozen: e.target.checked })} /><span><b>Komplain produk Cimol Frozen</b> (kemasan beku) yang dibeli di outlet / agen / channel ini<span className="block text-xs text-mute">Centang agar masuk dashboard Frozen dan aturan frozen (PIC, cost center, kode produksi).</span></span></label>}
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “mentah”, “kurang”, “salah”, “rambut”, “lama”.">
           {frozen && <FrozenSubChips masters={masters} value={subJenis} onChange={setSubJenis} />}
           <Combo items={subs} value={subJenis} onChange={setSubJenis} placeholder="Ketik masalahnya…" renderBadge={levelItemBadge} />

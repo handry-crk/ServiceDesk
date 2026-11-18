@@ -30,7 +30,7 @@ export default function CaseDetail() {
   if (loading && !c) return <Skeleton h="h-96" />
   if (error) return <ErrorBox error={error} />
   const crit = c.level === 'Critical'
-  const frozen = c.outletType === 'online_frozen'
+  const frozen = !!c.frozen || c.outletType === 'online_frozen'
 
   const Row = ({ k, v }) => <div className="flex justify-between gap-3 py-1.5 border-b border-line/60 last:border-0 text-sm"><span className="text-mute">{k}</span><span className="text-right font-medium">{v ?? '–'}</span></div>
 
@@ -374,8 +374,8 @@ function TimeSheet({ open, onClose, c, onDone }) {
 
 function EditSheet({ open, onClose, c, masters, onDone, limited }) {
   const [b, setB] = useState({})
-  const fz = c.outletType === 'online_frozen'
-  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, deskOverride: c.deskOverride || '', tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
+  const fz = !!c.frozen || c.outletType === 'online_frozen'
+  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, deskOverride: c.deskOverride || '', produkFrozen: !!c.produkFrozen, tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
   const subs = (masters?.subJenis || []).map((s) => ({ value: s.name, label: s.name, sub: s.contoh, keywords: s.keywords, level: s.level }))
   const outlets = (masters?.outlets || []).map((o) => ({ value: o.id, label: o.name, sub: o.area }))
   const set = (k) => (e) => setB({ ...b, [k]: e.target ? e.target.value : e })
@@ -396,6 +396,7 @@ function EditSheet({ open, onClose, c, masters, onDone, limited }) {
           <Field label="Komplain valid"><select className={inputCls} value={b.valid} onChange={set('valid')}><option>Y</option><option>N</option></select></Field>
           <Field label="PIC Dept"><select className={inputCls} value={b.picDept} onChange={set('picDept')}><option value="">–</option>{masters?.picDept.map((x) => <option key={x}>{x}</option>)}</select></Field>
           <Field label="Desk CS" hint="Otomatis dari channel & outlet. Ubah bila case harus ditangani desk lain."><select className={inputCls} value={b.deskOverride || ''} onChange={set('deskOverride')}><option value="">Otomatis ({deskLabel(c.deskOverride ? null : c.desk)})</option><option value="Online">CS Online / Marketplace</option><option value="Offline">CS Offline</option></select></Field>
+          {c.outletType !== 'online_frozen' && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="w-5 h-5" checked={!!b.produkFrozen} onChange={(e) => setB({ ...b, produkFrozen: e.target.checked })} />Komplain produk Cimol Frozen (kemasan beku)</label>}
           <Field label="No. pesanan"><input className={inputCls} value={b.orderNo || ''} onChange={set('orderNo')} /></Field>
           <Field label="Nama customer"><input className={inputCls} value={b.customerName || ''} onChange={set('customerName')} /></Field>
           <Field label="No. HP customer"><input className={inputCls} value={b.customerPhone || ''} onChange={set('customerPhone')} /></Field>

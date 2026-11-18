@@ -6,7 +6,7 @@ import { Combo, levelItemBadge, PhotoPick, subJenisItems, FrozenSubChips } from 
 import { VoucherMsg } from './CaseDetail.jsx'
 
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
-const EMPTY = { outletId: '', subJenis: '', ringkasan: '', masuk: '', dibalas: '', selesai: '', status: 'selesai', rootCause: '', kompensasiKey: '', nilai: '', followUpUlang: 'N', orderNo: '', customerName: '', customerPhone: '', produk: '', kodeProduksi: '', ekspedisi: '' }
+const EMPTY = { produkFrozen: false, outletId: '', subJenis: '', ringkasan: '', masuk: '', dibalas: '', selesai: '', status: 'selesai', rootCause: '', kompensasiKey: '', nilai: '', followUpUlang: 'N', orderNo: '', customerName: '', customerPhone: '', produk: '', kodeProduksi: '', ekspedisi: '' }
 
 export default function Rekap() {
   const { masters, loadMasters, notify, can } = useApp()
@@ -35,7 +35,8 @@ export default function Rekap() {
   const sj = masters?.subJenis.find((s) => s.name === f.subJenis)
   const outlet = masters?.outlets.find((o) => o.id === f.outletId)
   const ch = masters?.channels.find((c) => c.name === channel)
-  const frozen = outlet?.type === 'online_frozen'
+  const frozenStore = outlet?.type === 'online_frozen'
+  const frozen = frozenStore || !!f.produkFrozen
   const subs = subJenisItems(masters, frozen)
   const level = sj?.level
   const komp = (masters?.kompensasi || []).filter((k) => !level || k.level === level || k.level === 'Semua').sort((a, b) => (b.standard ? 1 : 0) - (a.standard ? 1 : 0))
@@ -78,7 +79,7 @@ export default function Rekap() {
         waktuResolved: done ? fromLocalInput(f.selesai || toLocalInput()) : null, rootCause: done ? f.rootCause : null, kompensasiKey: done ? f.kompensasiKey : null,
         nilaiKompensasi: done && f.nilai !== '' ? Number(f.nilai) : null, closed: f.status === 'closed', followUpUlang: f.followUpUlang,
         chatText: chat || null, chatCustomer: cust, photo, orderNo: f.orderNo || null, customerName: f.customerName || null, customerPhone: f.customerPhone || null,
-        produk: frozen ? f.produk || null : null, kodeProduksi: frozen ? f.kodeProduksi || null : null, ekspedisi: frozen ? f.ekspedisi || null : null, force,
+        produk: frozen ? f.produk || null : null, kodeProduksi: frozen ? f.kodeProduksi || null : null, ekspedisi: frozen ? f.ekspedisi || null : null, produkFrozen: !frozenStore && f.produkFrozen ? true : null, force,
       }
       const r = await api('/cases/rekap', { method: 'POST', body })
       ls.set('sd_last_channel', channel)
@@ -129,6 +130,7 @@ export default function Rekap() {
               <Btn size="sm" disabled={newOutlet.trim().length < 3} onClick={addOutlet}>Tambah</Btn><Btn size="sm" kind="ghost" onClick={() => setNewOutlet(null)}>Batal</Btn></div>}
           {outlet?.pending && <div className="text-xs text-[#7A5410] mt-1">Outlet ini menunggu verifikasi CRM Supervisor. Case tetap tersimpan.</div>}
         </Field>
+        {f.outletId && !frozenStore && <label className="flex items-start gap-2 text-sm rounded-xl border border-line p-3 bg-white"><input type="checkbox" className="w-5 h-5 mt-0.5" checked={f.produkFrozen} onChange={(e) => set('produkFrozen', e.target.checked)} /><span><b>Komplain produk Cimol Frozen</b> (kemasan beku) yang dibeli di outlet / agen / channel ini<span className="block text-xs text-mute">Centang agar masuk dashboard Frozen dan aturan frozen (PIC, cost center, kode produksi).</span></span></label>}
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “kurang”, “pecah”, “bocor”, “telat”.">{frozen && <FrozenSubChips masters={masters} value={f.subJenis} onChange={(v) => set('subJenis', v)} />}<Combo items={subs} value={f.subJenis} onChange={(v) => set('subJenis', v)} placeholder={frozen ? 'Atau ketik masalahnya…' : 'Ketik masalahnya…'} renderBadge={levelItemBadge} /></Field>
         <Field label="Ringkasan masalah" required hint="Terisi dari pesan customer; rapikan seperlunya."><textarea className={inputCls + ' min-h-[72px] py-2'} value={f.ringkasan} onChange={(e) => set('ringkasan', e.target.value)} /></Field>
         {ch?.orderRequired && <Field label={`No. Pesanan ${channel}`}><input className={inputCls} value={f.orderNo} onChange={(e) => set('orderNo', e.target.value.trim())} /></Field>}

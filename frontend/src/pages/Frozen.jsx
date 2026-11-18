@@ -75,7 +75,7 @@ export function FrozenBody({ d }) {
         <ChartCard title="Masalah frozen (sub jenis)">
           {d.subJenis.length ? <HBar rows={d.subJenis} colorBy={(r) => LEVEL_COLOR[r.levelStandard] || MUTE} /> : <Empty />}
         </ChartCard>
-        <ChartCard title="Per toko online">
+        <ChartCard title="Per toko / outlet">
           <Table head={['Toko', 'Case', 'Open', 'FRT', '% Same-day']} rows={d.stores.map((r) => (
             <tr key={r.name} className="border-t border-line tabnum"><td className="py-1.5 pr-2">{r.name}</td><td>{r.count}</td><td>{r.open}</td><td>{fmtMin(r.avgFrt)}</td><td>{fmtPct(r.sameDay)}</td></tr>))} />
         </ChartCard>
@@ -143,7 +143,7 @@ export default function Frozen() {
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <PeriodPicker value={period} onChange={setPeriod} />
-        {d && <span className="text-sm text-mute">Toko Online Frozen (Shopee, TikTok) · dibandingkan {fmtD(d.period.prevFrom)} – {fmtD(d.period.prevTo)}</span>}
+        {d && <span className="text-sm text-mute">Produk Cimol Frozen: toko marketplace + komplain frozen dari channel lain · dibandingkan {fmtD(d.period.prevFrom)} – {fmtD(d.period.prevTo)}</span>}
       </div>
       <ErrorBox error={error} />
       {loading && !d ? <div className="grid gap-3"><Skeleton /><Skeleton h="h-64" /></div> : d && <div className={loading ? 'opacity-60 transition' : 'transition'}><FrozenBody d={d} /></div>}

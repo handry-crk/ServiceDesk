@@ -49,9 +49,9 @@ async def cases_in_period(frm: str, to: str, u=None, brand=None, area=None, ctx=
     if area:
         q["area"] = area
     if line == "frozen":
-        q["outletType"] = "online_frozen"
+        q["frozen"] = True
     elif line == "outlet":
-        q["outletType"] = {"$ne": "online_frozen"}
+        q["frozen"] = {"$ne": True}
     if u:
         area_filter(u, q)
     return [compute_case(c, ctx) async for c in get_db().cases.find(q)]
@@ -80,6 +80,7 @@ class CaseIn(BaseModel):
     source: Optional[str] = "manual"
     sourceRefId: Optional[str] = None
     waktuMasukReason: Optional[str] = None
+    produkFrozen: Optional[bool] = None
     force: bool = False
 
 
@@ -132,7 +133,9 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
         "waktuMasukReason": (body.waktuMasukReason or "").strip() or None,
     }
     sj = ctx["subJenis"][body.subJenis]
-    c["picDept"] = sj["picFrozen"] if outlet["type"] == "online_frozen" else sj["picOutlet"]
+    if body.produkFrozen:
+        c["produkFrozen"] = True
+    c["picDept"] = sj["picFrozen"] if (outlet["type"] == "online_frozen" or body.produkFrozen) else sj["picOutlet"]
     await save_case(c, ctx)
     await add_event(case_id, "created", u, {"channel": body.channel})
     return out_case(c, u)
@@ -208,6 +211,7 @@ class PatchIn(BaseModel):
     qtyPesan: Optional[int] = None
     qtyDiterima: Optional[int] = None
     deskOverride: Optional[str] = None
+    produkFrozen: Optional[bool] = None
 
 
 @router.patch("/cases/{case_id}")

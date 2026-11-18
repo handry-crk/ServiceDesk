@@ -732,3 +732,19 @@ def test_frozen_subs_and_generic_chat(ctx):
             "waktuMasuk": p["masuk"], "waktuFirstResponse": p["dibalas"], "chatText": t, "orderNo": "D-1", "force": True}
     r = c.post("/api/cases/rekap", json=body, headers=H).json()
     assert r["timeEvidence"] == "chat" and r["frtMin"] == 7 and r["desk"] == "Online" and r["caseId"].startswith("FRZ")
+
+
+def test_frozen_product_line_any_outlet(ctx):
+    c, H, o = ctx
+    day = wib_iso(2026, 8, 5, 10, 0)
+    a = mk(c, H, o, subJenis="Missing Item", ringkasan="frozen beli di gerobak kurang", waktuMasuk=day, produkFrozen=True, produk="Mozza AP").json()
+    assert a["frozen"] is True and a["caseId"].startswith("OTL") and a["costCenter"] == "Team Frozen" and a["picDept"] == "Gudang / Packing Frozen"
+    assert "Kode produksi belum diisi" in a["dataIssues"]
+    b = mk(c, H, o, subJenis="Missing Item", ringkasan="gerobak biasa kurang", waktuMasuk=wib_iso(2026, 8, 6, 10, 0)).json()
+    assert b["frozen"] is False and b["costCenter"] == "Operasional"
+    f = c.get("/api/dashboard/frozen", params={"from": "2026-08-01", "to": "2026-08-31"}, headers=H).json()
+    assert f["volume"]["komplain"] == 1 and f["stores"][0]["name"] == "Jagakarsa"
+    ol = c.get("/api/dashboard", params={"from": "2026-08-01", "to": "2026-08-31", "line": "outlet"}, headers=H).json()
+    assert ol["volume"]["komplain"] == 1
+    r = c.patch(f"/api/cases/{b['caseId']}", json={"produkFrozen": True}, headers=H).json()
+    assert r["frozen"] is True and r["costCenter"] == "Team Frozen"

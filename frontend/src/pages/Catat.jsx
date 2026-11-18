@@ -112,7 +112,7 @@ export default function Catat() {
           ))}</div>
         </Field>
         <Field label="Outlet" required><Combo items={outlets} value={outletId} onChange={setOutletId} placeholder="Ketik nama outlet…" recent={recentOutlets} /></Field>
-        {outletId && !frozenStore && <label className="flex items-start gap-2 text-sm rounded-xl border border-line p-3 bg-white"><input type="checkbox" className="w-5 h-5 mt-0.5" checked={!!extra.produkFrozen} onChange={(e) => setExtra({ ...extra, produkFrozen: e.target.checked })} /><span><b>Komplain produk Cimol Frozen</b> (kemasan beku) yang dibeli di outlet / agen / channel ini<span className="block text-xs text-mute">Centang agar masuk dashboard Frozen dan aturan frozen (PIC, cost center, kode produksi).</span></span></label>}
+        {outletId && !frozenStore && <label className="flex items-start gap-2 text-sm rounded-xl border border-line p-3 bg-white"><input type="checkbox" className="w-5 h-5 mt-0.5" checked={!!extra.produkFrozen} onChange={(e) => setExtra({ ...extra, produkFrozen: e.target.checked })} /><span><b>Komplain produk Cimol Frozen</b> (kemasan beku) yang dibeli di outlet / agen / channel ini<span className="block text-xs text-mute">Centang agar ditangani CS Online / Marketplace dan masuk dashboard & aturan frozen (PIC, cost center, kode produksi).</span></span></label>}
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “mentah”, “kurang”, “salah”, “rambut”, “lama”.">
           {frozen && <FrozenSubChips masters={masters} value={subJenis} onChange={setSubJenis} />}
           <Combo items={subs} value={subJenis} onChange={setSubJenis} placeholder="Ketik masalahnya…" renderBadge={levelItemBadge} />

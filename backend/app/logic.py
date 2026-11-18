@@ -195,7 +195,7 @@ def compute_case(c: dict, ctx: dict) -> dict:
     # target & SLA
     ch = ctx["channels"].get(c.get("channel") or "") or {}
     # desk CS yang menangani: Online/Marketplace bila toko online frozen atau channel online; selain itu Offline
-    c["desk"] = c.get("deskOverride") or ("Online" if (otype == "online_frozen" or ch.get("desk") == "Online") else "Offline")
+    c["desk"] = c.get("deskOverride") or ("Online" if (c.get("frozen") or ch.get("desk") == "Online") else "Offline")
     tfrt = ch.get("targetFrt", 5)
     if lvl == "Critical":
         tfrt = min(tfrt, ctx.get("criticalFrt", 30))

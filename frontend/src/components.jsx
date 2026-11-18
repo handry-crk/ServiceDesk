@@ -66,7 +66,10 @@ export function Combo({ items, value, onChange, placeholder, recent = [], render
     return items
       .map((i) => {
         const hay = (i.label + ' ' + (i.keywords || '') + ' ' + (i.sub || '')).toLowerCase()
-        const score = words.reduce((s, w) => s + (i.label.toLowerCase().includes(w) ? 3 : hay.includes(w) ? 1 : -100), 0)
+        const score = words.reduce((s, w) => {
+          const st = w.replace(/^(ke|ber|ter|di)(?=.{4,})/, '').replace(/(nya|an)$/, '')   // kekurangan → kurang
+          return s + (i.label.toLowerCase().includes(w) ? 2 : hay.includes(w) ? 1.5 : st.length >= 4 && hay.includes(st) ? 0.5 : -100)
+        }, 0)
         return { ...i, score }
       })
       .filter((i) => i.score > 0).sort((a, b) => b.score - a.score)
@@ -152,6 +155,28 @@ export function KodeLookup({ onDone }) {
           <Btn kind="ok" onClick={pakai}>Tandai terpakai / sudah diterima</Btn>
         </div>}
       </div>}
+    </div>
+  )
+}
+
+// Daftar sub jenis untuk Combo; outlet frozen → masalah frozen di urutan atas dengan contoh khas frozen
+export function subJenisItems(masters, frozen) {
+  const all = (masters?.subJenis || []).filter((s) => s.active !== false && s.name !== 'Lainnya: Rasa / Porsi')
+  const list = frozen ? [...all].sort((a, b) => (a.frozen ? a.frozenOrder ?? 0 : 99) - (b.frozen ? b.frozenOrder ?? 0 : 99)) : all
+  return list.map((s) => ({ value: s.name, label: s.name, sub: frozen && s.frozenContoh ? s.frozenContoh : s.contoh, keywords: s.keywords, level: s.level }))
+}
+
+export function FrozenSubChips({ masters, value, onChange }) {
+  const list = (masters?.subJenis || []).filter((s) => s.frozen && s.active !== false).sort((a, b) => (a.frozenOrder ?? 0) - (b.frozenOrder ?? 0)).slice(0, 8)
+  if (!list.length) return null
+  return (
+    <div className="mb-2">
+      <div className="text-xs text-mute mb-1">Masalah frozen yang sering:</div>
+      <div className="grid sm:grid-cols-2 gap-1.5">{list.map((s) => (
+        <button type="button" key={s.name} onClick={() => onChange(s.name)} className={`text-left rounded-xl border px-3 py-2 ${value === s.name ? 'border-brick bg-brick-soft' : 'border-line bg-white'}`}>
+          <div className="text-sm font-semibold flex items-center gap-2">{s.name}<LevelBadge level={s.level} /></div>
+          <div className="text-xs text-mute">{s.frozenContoh}</div>
+        </button>))}</div>
     </div>
   )
 }

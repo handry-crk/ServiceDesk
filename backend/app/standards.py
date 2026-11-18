@@ -286,3 +286,19 @@ def guess_area(name: str) -> str:
         if hint in n:
             return area
     return "Belum diatur"
+
+
+# Sub jenis yang relevan untuk komplain frozen (toko Online Frozen) + contoh & kata kunci khas frozen
+FROZEN_SUBS = [
+    ("Missing Item", "Produk kurang: jumlah pcs / pack / bumbu yang diterima kurang dari pesanan", "kekurangan produk kurang jumlah kurang isi kurang tidak lengkap pack kurang bumbu kurang frozen"),
+    ("Wrong Item", "Salah varian / salah produk / tertukar dengan pesanan lain", "salah varian salah kirim salah produk tertukar beda rasa frozen"),
+    ("Cacat Produksi", "Produk pecah, hancur, bentuk tidak sesuai, isi kosong", "pecah hancur rusak penyok bentuk isian kosong bolong frozen"),
+    ("Penurunan Mutu (masih dapat dikonsumsi)", "Produk mencair / lembek / berubah warna tapi masih bisa dimakan", "mencair cair lembek es batu tidak beku berubah warna frozen"),
+    ("Penurunan Mutu (tidak dapat dikonsumsi)", "Produk basi, bau, berjamur, kadaluarsa", "basi bau berjamur kadaluarsa expired busuk berlendir frozen"),
+    ("Kontaminasi", "Ada benda asing di dalam produk", "benda asing rambut plastik frozen"),
+    ("Kesalahan Kemasan", "Kemasan bocor, sobek, segel rusak, label salah", "bocor sobek segel rusak vakum lepas label salah bubble wrap frozen"),
+    ("Delivery / Ekspedisi", "Paket telat, hilang, stuck, retur, salah alamat", "telat lama sampai hilang nyasar salah alamat belum sampai frozen"),
+    ("Keracunan", "Sakit setelah makan produk", "frozen"),
+    ("Hospitality", "Balasan admin / CS toko tidak ramah atau lambat", "admin slow respon tidak dibalas frozen"),
+    ("Payment Issue", "Refund belum masuk, dana tertahan", "refund belum masuk dana pengembalian frozen"),
+]

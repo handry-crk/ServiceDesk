@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, useApp, useAsync, toLocalInput, fromLocalInput, fmtDT, fmtMin, workMinutes, WRITERS } from '../lib.jsx'
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge, StatusBadge, Sheet } from '../ui.jsx'
-import { Combo, levelItemBadge, PhotoPick } from '../components.jsx'
+import { Combo, levelItemBadge, PhotoPick, subJenisItems, FrozenSubChips } from '../components.jsx'
 import { VoucherMsg } from './CaseDetail.jsx'
 
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
@@ -27,7 +27,6 @@ export default function Rekap() {
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
 
   const outlets = useMemo(() => (masters?.outlets || []).filter((o) => o.active).map((o) => ({ value: o.id, label: o.name + (o.pending ? ' (menunggu verifikasi)' : ''), sub: `${o.area} · ${o.type.replace('_', ' ')}`, keywords: (o.aliases || []).join(' ') })), [masters])
-  const subs = useMemo(() => (masters?.subJenis || []).filter((s) => s.active !== false && s.name !== 'Lainnya: Rasa / Porsi').map((s) => ({ value: s.name, label: s.name, sub: s.contoh, keywords: s.keywords, level: s.level })), [masters])
   const chGroups = useMemo(() => {
     const g = {}
     ;(masters?.channels || []).filter((c) => !['CSAT Form', 'Review Online'].includes(c.name)).forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
@@ -37,6 +36,7 @@ export default function Rekap() {
   const outlet = masters?.outlets.find((o) => o.id === f.outletId)
   const ch = masters?.channels.find((c) => c.name === channel)
   const frozen = outlet?.type === 'online_frozen'
+  const subs = subJenisItems(masters, frozen)
   const level = sj?.level
   const komp = (masters?.kompensasi || []).filter((k) => !level || k.level === level || k.level === 'Semua').sort((a, b) => (b.standard ? 1 : 0) - (a.standard ? 1 : 0))
   const tfrt = level === 'Critical' ? Math.min(ch?.targetFrt || 5, masters?.criticalFrt || 30) : ch?.targetFrt
@@ -95,8 +95,8 @@ export default function Rekap() {
   return (
     <div className="max-w-3xl mx-auto">
       <ModeTabs />
-      <h1 className="text-2xl font-extrabold mb-1">Rekap dari WhatsApp</h1>
-      <p className="text-sm text-mute mb-4">Selesaikan komplain di WhatsApp dulu, lalu rekap di sini. Tempel chat-nya: jam masuk & jam dibalas terisi otomatis dan chat menjadi bukti.</p>
+      <h1 className="text-2xl font-extrabold mb-1">Rekap komplain</h1>
+      <p className="text-sm text-mute mb-4">Selesaikan komplain dulu (WhatsApp, Douke, chat marketplace), lalu rekap di sini. Tempel chat-nya: jam masuk & jam dibalas terisi otomatis dan chat menjadi bukti. Chat tidak bisa disalin? Lewati langkah 1, isi jam sendiri dan lampirkan screenshot.</p>
 
       {saved && <Card className="p-4 mb-4 border-ok border-2">
         <div className="flex flex-wrap items-center gap-2"><span className="font-extrabold text-lg">✓ {saved.caseId} tersimpan</span><LevelBadge level={saved.level} /><StatusBadge status={saved.status} />
@@ -107,7 +107,7 @@ export default function Rekap() {
       </Card>}
 
       <Card className="p-4 space-y-5">
-        <Field label="1. Tempel chat WhatsApp" hint="WhatsApp Web/Desktop: blok pesan dari awal komplain sampai selesai → klik kanan → Salin → tempel di sini. Bisa juga isi file 'Export chat'.">
+        <Field label="1. Tempel chat (opsional)" hint="WhatsApp Web/Desktop: blok pesan dari awal sampai selesai → Salin → tempel. Douke / platform lain: salin percakapan beserta nama dan tanggal-jam tiap pesan. Bila tidak terbaca, isi jam di langkah 3 dan lampirkan screenshot.">
           <textarea className={inputCls + ' min-h-[120px] py-2 text-sm font-mono'} value={chat} onChange={(e) => setChat(e.target.value)} placeholder={'[10.02, 16/11/2026] +62 812-xxxx: Kak cimol saya kurang 2\n[10.04, 16/11/2026] CS Cimol Bojot AA: Mohon maaf kak…'} />
         </Field>
         {parseErr && <div className="text-sm text-brick -mt-3">{parseErr}</div>}
@@ -129,7 +129,7 @@ export default function Rekap() {
               <Btn size="sm" disabled={newOutlet.trim().length < 3} onClick={addOutlet}>Tambah</Btn><Btn size="sm" kind="ghost" onClick={() => setNewOutlet(null)}>Batal</Btn></div>}
           {outlet?.pending && <div className="text-xs text-[#7A5410] mt-1">Outlet ini menunggu verifikasi CRM Supervisor. Case tetap tersimpan.</div>}
         </Field>
-        <Field label="Sub Jenis Komplain" required><Combo items={subs} value={f.subJenis} onChange={(v) => set('subJenis', v)} placeholder="Ketik masalahnya…" renderBadge={levelItemBadge} /></Field>
+        <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “kurang”, “pecah”, “bocor”, “telat”.">{frozen && <FrozenSubChips masters={masters} value={f.subJenis} onChange={(v) => set('subJenis', v)} />}<Combo items={subs} value={f.subJenis} onChange={(v) => set('subJenis', v)} placeholder={frozen ? 'Atau ketik masalahnya…' : 'Ketik masalahnya…'} renderBadge={levelItemBadge} /></Field>
         <Field label="Ringkasan masalah" required hint="Terisi dari pesan customer; rapikan seperlunya."><textarea className={inputCls + ' min-h-[72px] py-2'} value={f.ringkasan} onChange={(e) => set('ringkasan', e.target.value)} /></Field>
         {ch?.orderRequired && <Field label={`No. Pesanan ${channel}`}><input className={inputCls} value={f.orderNo} onChange={(e) => set('orderNo', e.target.value.trim())} /></Field>}
         {frozen && <div className="grid gap-3 sm:grid-cols-3">
@@ -205,7 +205,7 @@ export default function Rekap() {
 
 export function ModeTabs({ live, mode }) {
   const cur = mode || (live ? 'live' : 'rekap')
-  const tabs = [['rekap', '/catat', 'Rekap dari WhatsApp'], ['bulk', '/catat?mode=bulk', 'Bulk input'], ['live', '/catat?mode=live', 'Catat real time']]
+  const tabs = [['rekap', '/catat', 'Rekap chat'], ['bulk', '/catat?mode=bulk', 'Bulk input'], ['live', '/catat?mode=live', 'Catat real time']]
   return (
     <div className="flex flex-wrap gap-1 mb-4 bg-white border border-line rounded-xl p-1 w-fit">
       {tabs.map(([k, to, l]) => <Link key={k} to={to} className={`px-3 md:px-4 min-h-[38px] flex items-center rounded-lg text-sm font-semibold ${cur === k ? 'bg-brick text-white' : 'hover:bg-cream'}`}>{l}</Link>)}

@@ -65,6 +65,14 @@ async def seed_if_empty():
         await db.channels.update_one({"_id": ch["_id"]}, {"$set": {"desk": S.default_desk(ch["name"])}})
     if await db.cases.count_documents({"desk": {"$exists": False}}):
         await recompute_all()
+    # migrasi: tanda & contoh khas frozen pada sub jenis (kata kunci ditambahkan, tidak menimpa)
+    for i, (name, contoh, kw) in enumerate(S.FROZEN_SUBS):
+        cur = await db.sub_jenis.find_one({"name": name})
+        if cur and cur.get("frozenContoh") is None:
+            have = (cur.get("keywords") or "")
+            add = " ".join(w for w in kw.split() if w not in have.split())
+            await db.sub_jenis.update_one({"_id": cur["_id"]}, {"$set": {
+                "frozen": True, "frozenOrder": i, "frozenContoh": contoh, "keywords": (have + " " + add).strip()}})
     for n, area in S.NEW_OUTLETS.items():
         if not await db.outlets.find_one({"name": n}):
             await db.outlets.insert_one({"id": new_id(), "name": n, "type": S.outlet_type(n), "area": area,

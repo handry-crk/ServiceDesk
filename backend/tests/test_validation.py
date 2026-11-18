@@ -716,3 +716,19 @@ def test_bulk_input(ctx):
     f = c.post("/api/cases/bulk/file", files={"file": ("t.xlsx", t.content)}, headers=A).json()
     assert c.post("/api/cases/bulk", json={"text": f["text"]}, headers=A).json()["summary"]["ok"] == 2
     assert c.post("/api/cases/bulk", json={"text": text}, headers=login(c, "Lihat", "123123")).status_code == 403
+
+
+def test_frozen_subs_and_generic_chat(ctx):
+    c, H, o = ctx
+    m = c.get("/api/masters", headers=H).json()
+    fz = [s for s in m["subJenis"] if s.get("frozen")]
+    assert {"Missing Item", "Cacat Produksi", "Delivery / Ekspedisi", "Kesalahan Kemasan"} <= {s["name"] for s in fz}
+    mi = next(s for s in fz if s["name"] == "Missing Item")
+    assert "kekurangan" in mi["keywords"] and mi["frozenContoh"].startswith("Produk kurang")
+    t = "Budi_shop 2026-11-02 10:02:11\nkak paket kurang 1 pack\nCimol Bojot AA Official 2026-11-02 10:09:40\nmohon maaf kak\n"
+    p = c.post("/api/wa/parse", json={"text": t}, headers=H).json()
+    assert p["messages"] == 2 and p["customer"] == "Budi_shop" and p["dibalas"].startswith("2026-11-02T10:09")
+    body = {"channel": "Marketplace Chat", "outletId": o["Online Frozen (Shopee)"], "subJenis": "Missing Item", "ringkasan": "kurang 1 pack douke",
+            "waktuMasuk": p["masuk"], "waktuFirstResponse": p["dibalas"], "chatText": t, "orderNo": "D-1", "force": True}
+    r = c.post("/api/cases/rekap", json=body, headers=H).json()
+    assert r["timeEvidence"] == "chat" and r["frtMin"] == 7 and r["desk"] == "Online" and r["caseId"].startswith("FRZ")

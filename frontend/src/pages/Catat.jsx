@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, useApp, toLocalInput, fromLocalInput, compressImage, WRITERS, LEAD } from '../lib.jsx'
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge } from '../ui.jsx'
-import { Combo, levelItemBadge } from '../components.jsx'
+import { Combo, levelItemBadge, subJenisItems, FrozenSubChips } from '../components.jsx'
 import { ModeTabs } from './Rekap.jsx'
 
 const FROZEN_KEYS = ['produk', 'ekspedisi', 'noResi', 'kodeProduksi', 'qtyPesan', 'qtyDiterima']
@@ -27,7 +27,6 @@ export default function Catat() {
   const fileRef = useRef()
 
   const outlets = useMemo(() => (masters?.outlets || []).filter((o) => o.active).map((o) => ({ value: o.id, label: o.name, sub: `${o.area} · ${o.type.replace('_', ' ')}`, keywords: (o.aliases || []).join(' ') })), [masters])
-  const subs = useMemo(() => (masters?.subJenis || []).filter((s) => s.active !== false && s.name !== 'Lainnya: Rasa / Porsi').map((s) => ({ value: s.name, label: s.name, sub: s.contoh, keywords: s.keywords, level: s.level })), [masters])
   const recentOutlets = ls.get('sd_recent_outlets', [])
   const sj = masters?.subJenis.find((s) => s.name === subJenis)
   const outlet = masters?.outlets.find((o) => o.id === outletId)
@@ -43,6 +42,7 @@ export default function Catat() {
   const pj = masters?.penanggungJawab?.[level] || '-'
   const tfrt = level === 'Critical' ? Math.min(ch?.targetFrt || 5, masters?.criticalFrt || 30) : ch?.targetFrt
   const frozen = outlet?.type === 'online_frozen'
+  const subs = subJenisItems(masters, frozen)
   const cc = !level ? '-' : level === 'Minor' ? (frozen && subJenis === 'Kesalahan Kemasan' ? 'Factory' : 'Operasional') : level === 'Major' ? (frozen ? 'Team Frozen' : 'Operasional') : level === 'Critical' ? ((['Kontaminasi', 'Keracunan', 'Undercooked'].includes(subJenis) || (frozen && subJenis === 'Penurunan Mutu (tidak dapat dikonsumsi)')) ? 'Factory/Operasional (cek root cause)' : 'Operasional') : 'Belum Diatur'
   const lagMax = masters?.settings?.masukLagReasonMin ?? 30
   const lagMin = waktu ? Math.round((Date.now() - new Date(fromLocalInput(waktu)).getTime()) / 60000) : 0
@@ -112,6 +112,7 @@ export default function Catat() {
         </Field>
         <Field label="Outlet" required><Combo items={outlets} value={outletId} onChange={setOutletId} placeholder="Ketik nama outlet…" recent={recentOutlets} /></Field>
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “mentah”, “kurang”, “salah”, “rambut”, “lama”.">
+          {frozen && <FrozenSubChips masters={masters} value={subJenis} onChange={setSubJenis} />}
           <Combo items={subs} value={subJenis} onChange={setSubJenis} placeholder="Ketik masalahnya…" renderBadge={levelItemBadge} />
         </Field>
         {sj && (

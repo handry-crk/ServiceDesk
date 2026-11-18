@@ -32,8 +32,8 @@ class ParseIn(BaseModel):
 async def wa_parse(body: ParseIn, u=Depends(require(*WRITERS))):
     r = analyze(body.text[:MAX_CHAT], body.customer)
     if not r.get("messages"):
-        raise HTTPException(400, "Format chat tidak dikenali. Salin dari WhatsApp Web/Desktop (blok pesan → salin) "
-                                 "atau tempel isi file 'Export chat'.")
+        raise HTTPException(400, "Jam di chat ini tidak terbaca otomatis. Tidak apa-apa: isi jam masuk & jam dibalas di langkah 3 "
+                                 "dan lampirkan screenshot chat.")
     return r
 
 

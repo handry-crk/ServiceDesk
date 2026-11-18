@@ -63,9 +63,57 @@ def parse_chat(text):
     return msgs
 
 
+_G = re.compile(r"(?:(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})|(\d{1,2})([-/.])(\d{1,2})(?:[-/.](\d{2,4}))?)[ ,T]+(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?")
+
+
+def parse_generic(text):
+    """Platform lain (Douke, seller center, dll.): baris judul berisi nama + tanggal-jam, diikuti isi pesan.
+    Contoh: 'Budi 2026-11-18 10:02:11', '2026-11-18 10:02 CS Aliya', atau nama dan tanggal-jam di baris terpisah."""
+    msgs, prev = [], None
+    year = datetime.now(WIB).year
+    for raw in (text or "").splitlines():
+        line = _SP.sub(" ", _CLEAN.sub("", raw)).strip()
+        if not line:
+            continue
+        m = _G.search(line)
+        head = m and len(line) - (m.end() - m.start()) <= 45
+        if not head:
+            if msgs:
+                msgs[-1]["text"] = (msgs[-1]["text"] + "\n" + line).strip()
+            prev = line
+            continue
+        y, mo, d, a, sep, b, y2, h, mi, ap = m.groups()
+        try:
+            if y:
+                y, mo, d = int(y), int(mo), int(d)
+            else:
+                a, b = int(a), int(b)
+                y = int(y2) if y2 else year
+                y = y + 2000 if y < 100 else y
+                # 'MM-DD' (gaya aplikasi marketplace) bila tanpa tahun & pakai '-', selain itu DD/MM
+                mo, d = (a, b) if (not y2 and sep == "-") else (b, a)
+                if mo > 12:
+                    mo, d = d, mo
+            h, mi = int(h), int(mi)
+            if ap:
+                ap = ap.lower()
+                h = h + 12 if (ap == "pm" and h < 12) else 0 if (ap == "am" and h == 12) else h
+            at = datetime(y, mo, d, h, mi, tzinfo=WIB)
+        except ValueError:
+            continue
+        who = (line[:m.start()] + " " + line[m.end():]).strip(" -:|·,[]()")
+        if not who and prev and len(prev) <= 45:
+            who = prev
+            if msgs and msgs[-1]["text"].endswith(prev):   # baris nama terlanjur menempel ke pesan sebelumnya
+                msgs[-1]["text"] = msgs[-1]["text"][:-len(prev)].strip()
+        msgs.append({"at": at, "sender": who or "Tanpa nama", "text": ""})
+        prev = None
+    return msgs if len(msgs) >= 2 else []
+
+
 def analyze(text, customer=None):
     """Waktu masuk = pesan pertama customer; dibalas = pesan pertama pihak lain sesudahnya."""
-    msgs = parse_chat(text)
+    msgs = parse_chat(text) or parse_generic(text)
     if not msgs:
         return {"messages": 0}
     senders = []

@@ -31,7 +31,7 @@ CHANNELS = [
      "orderRequired": True, "desk": "Online", "hidden": True},
     {"name": "CSAT Form", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Survei & Review"},
     {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Platform Online",
-     "orderRequired": True},
+     "orderRequired": True, "desk": "Online"},
 ]
 
 # Channel aggregator tidak lagi dipilih saat mencatat: dicatat sebagai Review Online + Platform Online.

@@ -63,6 +63,11 @@ async def seed_if_empty():
     # migrasi: desk CS per channel (Online / Offline), lalu hitung ulang case lama agar punya desk
     async for ch in db.channels.find({"desk": {"$exists": False}}):
         await db.channels.update_one({"_id": ch["_id"]}, {"$set": {"desk": S.default_desk(ch["name"])}})
+    # migrasi: Platform Online (Review Online) ditangani CS Online
+    rv = await db.channels.find_one({"name": "Review Online"})
+    if rv and not rv.get("deskOnlineSet"):
+        await db.channels.update_one({"_id": rv["_id"]}, {"$set": {"desk": "Online", "deskOnlineSet": True}})
+        await db.cases.update_many({"channel": "Review Online"}, {"$unset": {"desk": ""}})
     if await db.cases.count_documents({"$or": [{"desk": {"$exists": False}}, {"frozen": {"$exists": False}},
                                                 {"frozen": True, "desk": "Offline", "deskOverride": None}]}):
         await recompute_all()

@@ -800,7 +800,7 @@ def test_platform_online_tiktok_go(ctx):
     assert ch["GoFood"]["hidden"] and ch["GrabFood"]["hidden"] and ch["ShopeeFood"]["hidden"] and not ch["Review Online"].get("hidden")
     r = c.post("/api/cases/rekap", json={"channel": "Review Online", "outletId": o["Jagakarsa"], "subJenis": "Hospitality", "ringkasan": "tiktok go",
                "waktuMasuk": wib_iso(2026, 5, 5, 10, 0), "reviewPlatform": "TikTok Go", "force": True}, headers=H).json()
-    assert r["reviewPlatform"] == "TikTok Go"
+    assert r["reviewPlatform"] == "TikTok Go" and r["desk"] == "Online"
     t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\n06/05/2026\t10.00\t10.05\tTikTok Go\tJagakarsa\tHospitality\tbulk tiktok go"
     d = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()["rows"][0]["data"]
     assert d["channel"] == "Review Online" and d["platform"] == "TikTok Go"

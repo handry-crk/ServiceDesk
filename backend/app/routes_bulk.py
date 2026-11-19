@@ -40,6 +40,8 @@ COLS = [  # (kunci, judul di template, alias header)
     ("customerName", "Nama Customer", ["nama customer", "nama", "customer"]),
     ("customerPhone", "No HP", ["no hp", "no. hp", "hp", "whatsapp", "no wa", "no. wa"]),
     ("orderNo", "No Pesanan", ["no pesanan", "no. pesanan", "order", "order id"]),
+    ("platform", "Platform Online", ["platform online", "platform", "platform review"]),
+    ("rating", "Rating", ["rating", "bintang"]),
     ("order", "Jam Order", ["jam order", "waktu order", "jam pesan", "waktu pesan", "jam order customer"]),
 ]
 REQUIRED = ("tanggal", "masuk", "dibalas", "channel", "outlet", "subJenis", "ringkasan")
@@ -131,13 +133,26 @@ def _best(name, options):
 
 async def _check(rows, ctx, u):
     db = get_db()
-    channels = [c for c in ctx["channels"] if c not in ("CSAT Form", "Review Online")]
+    channels = [c for c in ctx["channels"] if c != "CSAT Form"]
     subs = list(ctx["subJenis"])
     t = now()
     seen, out = set(), []
     for r in rows:
         err, warn, v = [], [], {}
+        plat = _best(r.get("platform"), S.REVIEW_PLATFORMS) if r.get("platform") else None
+        if r.get("platform") and not plat:
+            err.append(f"Platform Online '{r['platform']}' tidak dikenal (GoFood / GrabFood / ShopeeFood)")
+        if plat and not r.get("channel"):
+            r["channel"] = "Review Online"
+        rating = None
+        if r.get("rating"):
+            dg = re.sub(r"[^\d]", "", r["rating"])[:1]
+            rating = int(dg) if dg and 1 <= int(dg) <= 5 else None
+            if rating is None:
+                err.append("Rating harus 1–5")
         for k in REQUIRED:
+            if k == "dibalas" and plat and not r.get("selesai") and not r.get("kompensasi"):
+                continue   # review yang belum ditindaklanjuti boleh tanpa jam dibalas
             if not r.get(k):
                 err.append(f"{dict((a, b) for a, b, _ in COLS)[k]} kosong")
         base = _date(r.get("tanggal")) or _date(r.get("masuk"))
@@ -173,6 +188,8 @@ async def _check(rows, ctx, u):
         ch = _best(CH_ALIAS.get(_norm(r.get("channel")), r.get("channel")), channels)
         if r.get("channel") and not ch:
             err.append(f"Channel '{r['channel']}' tidak dikenal")
+        if ch == "Review Online" and not plat and not r.get("platform"):
+            err.append("Platform Online kosong (wajib untuk channel Review Online)")
         sj = _best(r.get("subJenis"), subs)
         if r.get("subJenis") and not sj:
             err.append(f"Sub Jenis '{r['subJenis']}' tidak dikenal")
@@ -230,6 +247,7 @@ async def _check(rows, ctx, u):
                              "status": "Closed" if (closed and done) else "Selesai" if done else "Diproses",
                              "customerName": r.get("customerName") or None, "customerPhone": r.get("customerPhone") or None,
                              "orderNo": r.get("orderNo") or None, "order": od.isoformat() if od else None,
+                             "platform": plat if ch == "Review Online" else None, "rating": rating if ch == "Review Online" else None,
                              "frtMin": round((f - m).total_seconds() / 60) if (m and f) else None}})
     return out
 
@@ -265,13 +283,13 @@ async def bulk(body: BulkIn, u=Depends(require(*WRITERS))):
             oid = d["outletId"]
             if not oid:
                 oid = (await quick_outlet(QuickOutletIn(name=d["outlet"]), u))["id"]
-            done = d["status"] != "Diproses"
+            done = d["status"] != "Diproses" and bool(d["dibalas"])
             rk = RekapIn(channel=d["channel"], outletId=oid, subJenis=d["subJenis"], ringkasan=d["ringkasan"],
                          waktuMasuk=d["masuk"], waktuFirstResponse=d["dibalas"],
                          waktuResolved=(d["selesai"] or d["dibalas"]) if done else None,
                          rootCause=d["rootCause"] if done else None, kompensasiKey=d["kompensasiKey"] if done else None,
                          nilaiKompensasi=d["nilai"] if done else None, closed=d["status"] == "Closed", followUpUlang="N",
-                         orderNo=d["orderNo"], customerName=d["customerName"], customerPhone=d["customerPhone"], waktuOrder=d.get("order"), force=True)
+                         orderNo=d["orderNo"], customerName=d["customerName"], customerPhone=d["customerPhone"], waktuOrder=d.get("order"), reviewPlatform=d.get("platform"), rating=d.get("rating"), force=True)
             c = await do_rekap(rk, u, evidence_override="bulk")
             created.append({"row": r["row"], "caseId": c["caseId"], "kode": c.get("voucherCode")})
         except HTTPException as e:
@@ -326,13 +344,15 @@ async def bulk_template(u=Depends(require(*WRITERS))):
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = PatternFill("solid", fgColor="B42F27")
     ws.append(["16/11/2026", "10.02", "10.05", "10.30", "WhatsApp", "Jagakarsa", "Missing Item", "Pesan 10 pcs, diterima 8 pcs",
-               "Ketelitian Crew", "Replacement (porsi baru)", "", "Selesai", "Budi", "081211112222", "", "09.40"])
+               "Ketelitian Crew", "Replacement (porsi baru)", "", "Selesai", "Budi", "081211112222", "", "", "", "09.40"])
     ws.append(["16/11/2026", "13.40", "13.44", "", "GoFood", "Kios Margonda", "Speed of Service", "Pesanan lama dibuat",
-               "", "", "", "Diproses", "", "", "F-1234567890", "13.05"])
-    for i, w in enumerate([12, 10, 11, 11, 16, 24, 26, 40, 22, 28, 11, 11, 16, 15, 16, 11]):
+               "", "", "", "Diproses", "", "", "F-1234567890", "", "", "13.05"])
+    ws.append(["16/11/2026", "19.20", "20.05", "", "Review Online", "Kios Margonda", "Missing Item", "Pesan 3 yang datang 2",
+               "", "", "", "Diproses", "", "", "F-3308407390", "GoFood", "1", ""])
+    for i, w in enumerate([12, 10, 11, 11, 16, 24, 26, 40, 22, 28, 11, 11, 16, 15, 16, 15, 8, 11]):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i + 1)].width = w
     ref = wb.create_sheet("Pilihan")
-    ch = [c for c in ctx["channels"] if c not in ("CSAT Form", "Review Online")]
+    ch = [c for c in ctx["channels"] if c != "CSAT Form"]
     sj = sorted(ctx["subJenis"].values(), key=lambda x: x.get("order", 0))
     kp = sorted(ctx["kompensasi"].values(), key=lambda x: x.get("order", 0))
     ref.append(["Channel", "Sub Jenis", "Level", "Kompensasi", "Untuk level", "Status"])
@@ -345,7 +365,8 @@ async def bulk_template(u=Depends(require(*WRITERS))):
     for col, w in zip("ABCDEF", (20, 40, 12, 52, 12, 12)):
         ref.column_dimensions[col].width = w
     note = wb.create_sheet("Petunjuk")
-    for line in ["Isi 1 baris = 1 komplain di sheet 'Bulk Input'. Hapus 2 baris contoh.",
+    for line in ["Isi 1 baris = 1 komplain di sheet 'Bulk Input'. Hapus 3 baris contoh.",
+                 "Review online (GoFood / GrabFood / ShopeeFood): kolomnya sama dengan komplain biasa, cukup isi Channel = Review Online dan Platform Online (+ Rating).",
                  "Wajib: Tanggal, Jam Masuk, Jam Dibalas, Channel, Outlet, Sub Jenis, Ringkasan.",
                  "Jam Masuk = jam pesan pertama customer; Jam Dibalas = jam balasan pertama CS (lihat di chat).",
                  "Status Selesai / Closed wajib mengisi Root Cause dan Kompensasi. Jam Selesai kosong = sama dengan Jam Dibalas.",

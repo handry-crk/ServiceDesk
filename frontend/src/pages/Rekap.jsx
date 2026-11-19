@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api, useApp, useAsync, toLocalInput, fromLocalInput, fmtDT, fmtMin, workMinutes, WRITERS } from '../lib.jsx'
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge, StatusBadge, Sheet } from '../ui.jsx'
 import { Combo, levelItemBadge, PhotoPick, subJenisItems, FrozenSubChips, OrderTimeInput } from '../components.jsx'
 import { VoucherMsg } from './CaseDetail.jsx'
 
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
-const EMPTY = { order: '', produkFrozen: false, outletId: '', subJenis: '', ringkasan: '', masuk: '', dibalas: '', selesai: '', status: 'selesai', rootCause: '', kompensasiKey: '', nilai: '', followUpUlang: 'N', orderNo: '', customerName: '', customerPhone: '', produk: '', kodeProduksi: '', ekspedisi: '' }
+const EMPTY = { reviewPlatform: '', rating: '', order: '', produkFrozen: false, outletId: '', subJenis: '', ringkasan: '', masuk: '', dibalas: '', selesai: '', status: 'selesai', rootCause: '', kompensasiKey: '', nilai: '', followUpUlang: 'N', orderNo: '', customerName: '', customerPhone: '', produk: '', kodeProduksi: '', ekspedisi: '' }
 
 export default function Rekap() {
   const { masters, loadMasters, notify, can } = useApp()
-  const [channel, setChannel] = useState(() => ls.get('sd_last_channel', 'WhatsApp'))
+  const [sp] = useSearchParams()
+  const [channel, setChannel] = useState(() => sp.get('channel') === 'review' ? 'Review Online' : ls.get('sd_last_channel', 'WhatsApp'))
   const [chat, setChat] = useState('')
   const [parsed, setParsed] = useState(null)
   const [parseErr, setParseErr] = useState(null)
   const [cust, setCust] = useState(null)
-  const [f, setF] = useState(EMPTY)
+  const [f, setF] = useState(() => sp.get('channel') === 'review' ? { ...EMPTY, status: 'proses' } : EMPTY)
   const [photo, setPhoto] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -29,7 +30,7 @@ export default function Rekap() {
   const outlets = useMemo(() => (masters?.outlets || []).filter((o) => o.active).map((o) => ({ value: o.id, label: o.name + (o.pending ? ' (menunggu verifikasi)' : ''), sub: `${o.area} · ${o.type.replace('_', ' ')}`, keywords: (o.aliases || []).join(' ') })), [masters])
   const chGroups = useMemo(() => {
     const g = {}
-    ;(masters?.channels || []).filter((c) => !['CSAT Form', 'Review Online'].includes(c.name)).forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
+    ;(masters?.channels || []).filter((c) => c.name !== 'CSAT Form').forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
     return Object.entries(g)
   }, [masters])
   const sj = masters?.subJenis.find((s) => s.name === f.subJenis)
@@ -55,10 +56,11 @@ export default function Rekap() {
   }
   useEffect(() => { clearTimeout(timer.current); timer.current = setTimeout(() => readChat(chat, null), 400); return () => clearTimeout(timer.current) }, [chat])
 
-  const fromChat = parsed?.masuk && parsed?.dibalas && f.masuk === toLocalInput(parsed.masuk) && f.dibalas === toLocalInput(parsed.dibalas)
+  const isReview = channel === 'Review Online'
+  const fromChat = isReview || (parsed?.masuk && parsed?.dibalas && f.masuk === toLocalInput(parsed.masuk) && f.dibalas === toLocalInput(parsed.dibalas))
   const done = f.status !== 'proses'
   const frt = f.masuk && f.dibalas ? workMinutes(fromLocalInput(f.masuk), fromLocalInput(f.dibalas), masters?.settings) : null
-  const missing = [!f.outletId && 'outlet', !f.subJenis && 'sub jenis', !f.ringkasan.trim() && 'ringkasan', !f.masuk && 'jam masuk', !f.dibalas && 'jam dibalas',
+  const missing = [!f.outletId && 'outlet', !f.subJenis && 'sub jenis', !f.ringkasan.trim() && 'ringkasan', !f.masuk && 'jam masuk', !f.dibalas && !(isReview && !done) && 'jam dibalas', isReview && !f.reviewPlatform && 'platform online',
     !fromChat && !photo && 'screenshot chat', !frozenStore && f.order && f.masuk && f.order > f.masuk && 'jam order yang benar', done && !f.rootCause.trim() && 'root cause', done && !f.kompensasiKey && 'kompensasi'].filter(Boolean)
 
   if (!can(...WRITERS)) return <ErrorBox error={{ message: 'Peran Anda tidak bisa mencatat case.' }} />
@@ -75,14 +77,14 @@ export default function Rekap() {
     setBusy(true); setErr(null)
     try {
       const body = {
-        channel, outletId: f.outletId, subJenis: f.subJenis, ringkasan: f.ringkasan, waktuMasuk: fromLocalInput(f.masuk), waktuFirstResponse: fromLocalInput(f.dibalas),
+        channel, outletId: f.outletId, subJenis: f.subJenis, ringkasan: f.ringkasan, waktuMasuk: fromLocalInput(f.masuk), waktuFirstResponse: f.dibalas ? fromLocalInput(f.dibalas) : null, reviewPlatform: isReview ? f.reviewPlatform : null, rating: isReview && f.rating ? Number(f.rating) : null,
         waktuResolved: done ? fromLocalInput(f.selesai || toLocalInput()) : null, rootCause: done ? f.rootCause : null, kompensasiKey: done ? f.kompensasiKey : null,
         nilaiKompensasi: done && f.nilai !== '' ? Number(f.nilai) : null, closed: f.status === 'closed', followUpUlang: f.followUpUlang,
         chatText: chat || null, chatCustomer: cust, photo, orderNo: f.orderNo || null, customerName: f.customerName || null, customerPhone: f.customerPhone || null,
         produk: frozen ? f.produk || null : null, kodeProduksi: frozen ? f.kodeProduksi || null : null, ekspedisi: frozen ? f.ekspedisi || null : null, produkFrozen: !frozenStore && f.produkFrozen ? true : null, waktuOrder: f.order && !frozenStore ? fromLocalInput(f.order) : null, force,
       }
       const r = await api('/cases/rekap', { method: 'POST', body })
-      ls.set('sd_last_channel', channel)
+      if (!isReview) ls.set('sd_last_channel', channel)
       setSaved(r); setDup(null)
       if (r.voucherWarning) notify(r.voucherWarning, 'err')
       setF({ ...EMPTY }); setChat(''); setParsed(null); setPhoto(null); setCust(null)
@@ -101,7 +103,7 @@ export default function Rekap() {
 
       {saved && <Card className="p-4 mb-4 border-ok border-2">
         <div className="flex flex-wrap items-center gap-2"><span className="font-extrabold text-lg">✓ {saved.caseId} tersimpan</span><LevelBadge level={saved.level} /><StatusBadge status={saved.status} />
-          <span className="text-sm text-mute">FRT {fmtMin(saved.frtMin)} · {saved.timeEvidence === 'chat' ? 'jam dari chat' : 'jam manual + screenshot'}</span>
+          <span className="text-sm text-mute">{saved.frtMin != null ? `FRT ${fmtMin(saved.frtMin)} · ` : ''}{saved.timeEvidence === 'chat' ? 'jam dari chat' : saved.timeEvidence === 'review' ? `review ${saved.reviewPlatform || ''}` : 'jam manual + screenshot'}</span>
           <Link to={'/case/' + saved.caseId} className="text-sm text-brick underline ml-auto">Buka case</Link></div>
         {saved.voucher && <div className="mt-3"><VoucherMsg c={saved} notify={notify} masters={masters} /></div>}
         <button className="text-xs text-mute underline mt-2" onClick={() => setSaved(null)}>Tutup</button>
@@ -123,6 +125,11 @@ export default function Rekap() {
             <div key={g}><div className="text-xs text-mute mb-1">{g}</div>
               <div className="flex flex-wrap gap-2">{list.map((c) => <Chip key={c} active={channel === c} onClick={() => setChannel(c)}>{c}</Chip>)}</div></div>))}</div>
         </Field>
+        {isReview && <div className="rounded-xl border border-line p-3 bg-white space-y-3">
+          <Field label="Platform Online" required><div className="flex flex-wrap gap-2">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood']).map((x) => <Chip key={x} active={f.reviewPlatform === x} onClick={() => set('reviewPlatform', x)}>{x}</Chip>)}</div></Field>
+          <Field label="Rating di platform"><div className="flex gap-2">{[1, 2, 3, 4, 5].map((n) => <Chip key={n} active={String(f.rating) === String(n)} onClick={() => set('rating', String(f.rating) === String(n) ? '' : n)}>{n} ★</Chip>)}</div></Field>
+          <div className="text-xs text-mute">Review online diisi dengan kolom yang sama seperti komplain biasa. Waktu masuk = tanggal-jam review. Jam dibalas boleh kosong bila review belum ditindaklanjuti (pilih "Masih diproses").</div>
+        </div>}
         <Field label="Outlet" required>
           <Combo items={outlets} value={f.outletId} onChange={(v) => set('outletId', v)} placeholder="Ketik nama outlet…" recent={ls.get('sd_recent_outlets', [])} />
           {newOutlet === null ? <button type="button" className="text-xs text-brick underline mt-1" onClick={() => setNewOutlet('')}>Outlet belum ada di daftar? Tambah sekarang</button>
@@ -144,7 +151,7 @@ export default function Rekap() {
           <div className="text-sm font-semibold mb-2">3. Waktu</div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Masuk" required><input type="datetime-local" className={inputCls} value={f.masuk} max={toLocalInput()} onChange={(e) => set('masuk', e.target.value)} /></Field>
-            <Field label="Dibalas pertama" required><input type="datetime-local" className={inputCls} value={f.dibalas} min={f.masuk} max={toLocalInput()} onChange={(e) => set('dibalas', e.target.value)} /></Field>
+            <Field label="Dibalas pertama" required={!isReview}><input type="datetime-local" className={inputCls} value={f.dibalas} min={f.masuk} max={toLocalInput()} onChange={(e) => set('dibalas', e.target.value)} /></Field>
             {done && <Field label="Selesai" hint="Kosong = sekarang"><input type="datetime-local" className={inputCls} value={f.selesai} min={f.dibalas} max={toLocalInput()} onChange={(e) => set('selesai', e.target.value)} />
               {parsed?.terakhir && <button type="button" className="text-xs text-brick underline mt-1" onClick={() => set('selesai', toLocalInput(parsed.terakhir))}>Pakai jam pesan terakhir</button>}</Field>}
           </div>
@@ -152,7 +159,7 @@ export default function Rekap() {
             <OrderTimeInput masuk={f.masuk} value={f.order} onChange={(v) => set('order', v)} /></Field></div>}
           {frt != null && <div className="text-sm mt-2">FRT jam kerja <b>{fmtMin(frt)}</b> (target {tfrt} mnt) — {frt <= tfrt ? <span className="text-ok font-semibold">sesuai SLA</span> : <span className="text-brick font-semibold">lewat SLA</span>}</div>}
           <div className={`text-sm mt-2 rounded-xl p-3 ${fromChat ? 'bg-[#E3F1E6] text-[#1F6B3A]' : 'bg-[#FBF1DC] text-[#7A5410]'}`}>
-            {fromChat ? '✓ Jam masuk & dibalas sesuai chat yang ditempel — langsung diterima.' : 'Jam diisi manual (atau berbeda dari chat): lampirkan screenshot chat yang memperlihatkan jamnya.'}
+            {isReview ? 'Review online: jam diisi dari tanggal review di platform, tidak perlu screenshot dan tidak dihitung SLA Response.' : fromChat ? '✓ Jam masuk & dibalas sesuai chat yang ditempel — langsung diterima.' : 'Jam diisi manual (atau berbeda dari chat): lampirkan screenshot chat yang memperlihatkan jamnya.'}
             {!fromChat && <div className="mt-2"><PhotoPick value={photo} onChange={setPhoto} /></div>}
           </div>
         </div>

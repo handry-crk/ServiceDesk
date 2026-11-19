@@ -714,7 +714,7 @@ def test_bulk_input(ctx):
     t = c.get("/api/cases/bulk/template", headers=A)
     assert t.status_code == 200 and len(t.content) > 3000
     f = c.post("/api/cases/bulk/file", files={"file": ("t.xlsx", t.content)}, headers=A).json()
-    assert c.post("/api/cases/bulk", json={"text": f["text"]}, headers=A).json()["summary"]["ok"] == 2
+    assert c.post("/api/cases/bulk", json={"text": f["text"]}, headers=A).json()["summary"]["ok"] == 3
     assert c.post("/api/cases/bulk", json={"text": text}, headers=login(c, "Lihat", "123123")).status_code == 403
 
 
@@ -767,3 +767,26 @@ def test_order_time(ctx):
     assert p["rows"][0]["data"]["order"].startswith("2026-07-07T09:20") and p["rows"][1]["data"]["order"].startswith("2026-07-07T23:50")
     s = c.post("/api/cases/bulk", json={"text": t, "dryRun": False}, headers=H).json()
     assert c.get(f"/api/cases/{s['created'][0]['caseId']}", headers=H).json()["orderToComplaintMin"] == 40
+
+
+def test_review_online_as_case(ctx):
+    c, H, o = ctx
+    m = wib_iso(2026, 6, 3, 19, 20)
+    base = {"channel": "Review Online", "outletId": o["Jagakarsa"], "subJenis": "Missing Item", "ringkasan": "pesan 3 datang 2", "waktuMasuk": m, "force": True}
+    assert c.post("/api/cases/rekap", json=base, headers=H).status_code == 400          # platform wajib
+    r = c.post("/api/cases/rekap", json={**base, "reviewPlatform": "GoFood", "rating": 1, "orderNo": "F-9"}, headers=H).json()
+    assert r["status"] == "Open" and r["reviewPlatform"] == "GoFood" and r["rating"] == 1 and r["timeEvidence"] == "review"
+    r2 = c.post("/api/cases/rekap", json={**base, "ringkasan": "review 2", "reviewPlatform": "GrabFood", "rating": 2,
+                "waktuFirstResponse": wib_iso(2026, 6, 3, 20, 0), "waktuResolved": wib_iso(2026, 6, 3, 21, 0),
+                "rootCause": "x", "kompensasiKey": "maj-apologize"}, headers=H).json()
+    assert r2["status"] == "Resolved" and r2["slaResponseOk"] is None and not r2.get("frtManual")
+    assert mk(c, H, o, channel="WhatsApp", ringkasan="bukan review", waktuMasuk=m, reviewPlatform="GoFood").json().get("reviewPlatform") is None
+    rs = c.get("/api/meetings", headers=H)
+    t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\tPlatform Online\tRating\n04/06/2026\t12.00\t\t\tJagakarsa\tHospitality\treview bulk\tshopeefood\t2\n04/06/2026\t13.00\t\tReview Online\tJagakarsa\tHospitality\ttanpa platform\t\t"
+    p = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()
+    assert p["rows"][0]["ok"] and p["rows"][0]["data"]["channel"] == "Review Online" and p["rows"][0]["data"]["platform"] == "ShopeeFood"
+    assert not p["rows"][1]["ok"]
+    s = c.post("/api/cases/bulk", json={"text": t, "dryRun": False}, headers=H).json()
+    k = c.get(f"/api/cases/{s['created'][0]['caseId']}", headers=H).json()
+    assert k["status"] == "Open" and k["reviewPlatform"] == "ShopeeFood" and k["rating"] == 2
+    from app.routes_cases import review_summary

@@ -27,7 +27,7 @@ function ReviewTab() {
   const outlets = (masters?.outlets || []).map((o) => ({ value: o.id, label: o.name }))
   return (
     <>
-      <div className="flex flex-wrap gap-2 mb-3 items-center"><PeriodPicker value={period} onChange={setPeriod} />{writer && <Btn size="sm" onClick={() => setAdd(true)}>+ Review</Btn>}</div>
+      <div className="flex flex-wrap gap-2 mb-3 items-center"><PeriodPicker value={period} onChange={setPeriod} />{writer && <Btn size="sm" onClick={() => nav('/catat?channel=review')}>+ Input review</Btn>}{writer && <Btn size="sm" kind="ghost" onClick={() => nav('/catat?mode=bulk')}>Bulk input</Btn>}<Btn size="sm" kind="ghost" onClick={() => nav('/case?channel=Review%20Online')}>Lihat review di Daftar Case</Btn></div>
       <div className="flex flex-wrap gap-2 mb-3">
         {['', ...(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood'])].map((x) => <Chip key={x} active={f.platform === x} onClick={() => setF({ ...f, platform: x })}>{x || 'Semua platform'}</Chip>)}
         {['', 'Critical', 'Major', 'Minor'].map((x) => <Chip key={'l' + x} active={f.level === x} onClick={() => setF({ ...f, level: x })}>{x || 'Semua level'}</Chip>)}

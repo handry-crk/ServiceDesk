@@ -82,7 +82,20 @@ class CaseIn(BaseModel):
     waktuMasukReason: Optional[str] = None
     produkFrozen: Optional[bool] = None
     waktuOrder: Optional[str] = None
+    reviewPlatform: Optional[str] = None
+    rating: Optional[int] = None
     force: bool = False
+
+
+def check_review(channel, platform, rating):
+    """Review online = case biasa + Platform Online (+ rating bintang)."""
+    if channel != "Review Online":
+        return {}
+    if platform not in S.REVIEW_PLATFORMS:
+        raise HTTPException(400, "Pilih Platform Online (" + " / ".join(S.REVIEW_PLATFORMS) + ") untuk review online.")
+    if rating is not None and not (1 <= rating <= 5):
+        raise HTTPException(400, "Rating harus 1–5.")
+    return {"reviewPlatform": platform, **({"rating": rating} if rating else {})}
 
 
 def check_order_time(value, masuk):
@@ -124,6 +137,7 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
     if w > now() + timedelta(minutes=2):
         raise HTTPException(400, "Waktu Masuk tidak boleh di masa depan.")
     wo = check_order_time(body.waktuOrder, w)
+    review = check_review(body.channel, body.reviewPlatform, body.rating)
     lag = (now() - as_utc(w)).total_seconds() / 60
     lag_max = ctx["settings"]["masukLagReasonMin"]
     if lag > lag_max and u["role"] not in LEAD and not (body.waktuMasukReason or "").strip():
@@ -154,6 +168,7 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
         c["produkFrozen"] = True
     if wo:
         c["waktuOrder"] = wo
+    c.update(review)
     c["picDept"] = sj["picFrozen"] if (outlet["type"] == "online_frozen" or body.produkFrozen) else sj["picOutlet"]
     await save_case(c, ctx)
     await add_event(case_id, "created", u, {"channel": body.channel})
@@ -232,6 +247,8 @@ class PatchIn(BaseModel):
     deskOverride: Optional[str] = None
     produkFrozen: Optional[bool] = None
     waktuOrder: Optional[str] = None
+    reviewPlatform: Optional[str] = None
+    rating: Optional[int] = None
 
 
 @router.patch("/cases/{case_id}")
@@ -254,6 +271,8 @@ async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
         if data["deskOverride"] not in S.DESKS + [""]:
             raise HTTPException(400, "Desk tidak dikenal.")
         data["deskOverride"] = data["deskOverride"] or None
+    if data.get("reviewPlatform") and data["reviewPlatform"] not in S.REVIEW_PLATFORMS:
+        raise HTTPException(400, "Platform Online tidak dikenal.")
     if "waktuOrder" in data:
         data["waktuOrder"] = check_order_time(data["waktuOrder"], c.get("waktuMasuk")) if data["waktuOrder"] else None
     before = {k: c.get(k) for k in data}
@@ -1081,9 +1100,14 @@ async def patch_action(aid: str, body: dict, u=Depends(require(*MEETING_EDITORS,
 # ------------------------------------------------------------------ summaries for meeting
 
 async def review_summary(frm, to):
-    rows = [r async for r in get_db().reviews.find({"tanggalDate": {"$gte": frm, "$lte": to}})]
+    """Review komplain online: data impor lama (koleksi reviews) + review yang dicatat sebagai case."""
     from collections import Counter
-    return {"count": len(rows),
+    db = get_db()
+    rows = [r async for r in db.reviews.find({"tanggalDate": {"$gte": frm, "$lte": to}, "linkedCaseId": None})]
+    cs = [c async for c in db.cases.find({"channel": "Review Online", "tanggalMasuk": {"$gte": frm, "$lte": to}})]
+    rows += [{"platform": c.get("reviewPlatform") or "Lainnya", "subJenis": c.get("subJenis"), "level": c.get("level"),
+              "statusTindakLanjut": "Belum diproses" if c.get("status") == "Open" else "Selesai"} for c in cs]
+    return {"count": len(rows), "cases": len(cs),
             "byPlatform": dict(Counter(r.get("platform") for r in rows)),
             "bySubJenis": Counter(r.get("subJenis") for r in rows).most_common(6),
             "byLevel": dict(Counter(r.get("level") or "Belum Diatur" for r in rows)),

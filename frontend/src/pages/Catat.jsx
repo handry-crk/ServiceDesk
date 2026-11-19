@@ -19,7 +19,7 @@ export default function Catat() {
   const [lagReason, setLagReason] = useState('')
   const [order, setOrder] = useState('')
   const [more, setMore] = useState(false)
-  const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
+  const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', reviewPlatform: '', rating: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
   const [photos, setPhotos] = useState([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -34,7 +34,7 @@ export default function Catat() {
   const ch = masters?.channels.find((c) => c.name === channel)
   const chGroups = useMemo(() => {
     const g = {}
-    ;(masters?.channels || []).filter((c) => !['CSAT Form', 'Review Online'].includes(c.name))
+    ;(masters?.channels || []).filter((c) => c.name !== 'CSAT Form')
       .forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
     return Object.entries(g)
   }, [masters])
@@ -80,7 +80,8 @@ export default function Catat() {
     setBusy(true); setErr(null)
     try {
       const ex = Object.fromEntries(Object.entries(extra).filter(([k, v]) => v && (frozen || !FROZEN_KEYS.includes(k))))
-      for (const k of ['qtyPesan', 'qtyDiterima']) if (ex[k]) ex[k] = Number(ex[k])
+      for (const k of ['qtyPesan', 'qtyDiterima', 'rating']) if (ex[k]) ex[k] = Number(ex[k])
+      if (channel !== 'Review Online') { delete ex.reviewPlatform; delete ex.rating }
       const body = { channel, outletId, subJenis, ringkasan, waktuMasuk: waktu ? fromLocalInput(waktu) : null, waktuMasukReason: needLag ? lagReason : null, waktuOrder: order && !frozenStore ? fromLocalInput(order) : null, photos, force, ...ex }
       const c = await api('/cases', { method: 'POST', body })
       ls.set('sd_last_channel', channel)
@@ -89,7 +90,7 @@ export default function Catat() {
         label: 'Sudah dibalas', fn: async () => { await api(`/cases/${c.caseId}/respond`, { method: 'POST' }); notify(`${c.caseId} ditandai sudah dibalas`) },
       })
       setOutletId(''); setSubJenis(''); setRingkasan(''); setWaktu(null); setLagReason(''); setOrder(''); setPhotos([]); setDup(null)
-      setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
+      setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', reviewPlatform: '', rating: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
       if (c.level === 'Critical') nav('/case/' + c.caseId)
     } catch (e) {
       if (e.status === 409) setDup(e.detail)
@@ -99,7 +100,7 @@ export default function Catat() {
 
   const setX = (k, v) => setExtra((x) => ({ ...x, [k]: v }))
   const quick = (min) => setWaktu(toLocalInput(new Date(Date.now() - min * 60000).toISOString()))
-  const ok = channel && outletId && subJenis && ringkasan.trim() && (!needLag || lagReason.trim()) && !(orderGap < 0)
+  const ok = channel && outletId && subJenis && ringkasan.trim() && (!needLag || lagReason.trim()) && !(orderGap < 0) && (channel !== 'Review Online' || extra.reviewPlatform)
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -113,6 +114,10 @@ export default function Catat() {
               <div className="flex flex-wrap gap-2">{list.map((c) => <Chip key={c} active={channel === c} onClick={() => setChannel(c)}>{c}</Chip>)}</div></div>
           ))}</div>
         </Field>
+        {channel === 'Review Online' && <div className="rounded-xl border border-line p-3 bg-white space-y-3">
+          <Field label="Platform Online" required><div className="flex flex-wrap gap-2">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood']).map((x) => <Chip key={x} active={extra.reviewPlatform === x} onClick={() => setExtra({ ...extra, reviewPlatform: x })}>{x}</Chip>)}</div></Field>
+          <Field label="Rating di platform"><div className="flex gap-2">{[1, 2, 3, 4, 5].map((n) => <Chip key={n} active={String(extra.rating) === String(n)} onClick={() => setExtra({ ...extra, rating: n })}>{n} ★</Chip>)}</div></Field>
+        </div>}
         <Field label="Outlet" required><Combo items={outlets} value={outletId} onChange={setOutletId} placeholder="Ketik nama outlet…" recent={recentOutlets} /></Field>
         {outletId && !frozenStore && <label className="flex items-start gap-2 text-sm rounded-xl border border-line p-3 bg-white"><input type="checkbox" className="w-5 h-5 mt-0.5" checked={!!extra.produkFrozen} onChange={(e) => setExtra({ ...extra, produkFrozen: e.target.checked })} /><span><b>Komplain produk Cimol Frozen</b> (kemasan beku) yang dibeli di outlet / agen / channel ini<span className="block text-xs text-mute">Centang agar ditangani CS Online / Marketplace dan masuk dashboard & aturan frozen (PIC, cost center, kode produksi).</span></span></label>}
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “mentah”, “kurang”, “salah”, “rambut”, “lama”.">

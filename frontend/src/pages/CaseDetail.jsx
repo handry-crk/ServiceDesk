@@ -98,7 +98,7 @@ export default function CaseDetail() {
         </Card>}
         <Card className="p-4">
           <h3 className="font-bold mb-2">Customer & sumber</h3>
-          <Row k="Channel" v={c.channel} /><Row k="Brand" v={c.brand} /><Row k="Tipe" v={c.tipe} /><Row k="Valid" v={c.valid} />
+          <Row k="Channel" v={c.channel} />{c.reviewPlatform && <Row k="Platform online" v={`${c.reviewPlatform}${c.rating ? ` · ${c.rating} ★` : ''}`} />}<Row k="Brand" v={c.brand} /><Row k="Tipe" v={c.tipe} /><Row k="Valid" v={c.valid} />
           <Row k="No. pesanan" v={c.orderNo} /><Row k="Nama" v={c.customerName} /><Row k="No. HP" v={c.customerPhone} />
           <Row k="Desk CS" v={deskLabel(c.desk) + (c.deskOverride ? ' (dipindah manual)' : '')} /><Row k="Dicatat oleh" v={c.csAgent} />{c.frBy && <Row k="Dibalas oleh" v={c.frBy} />}<Row k="Sumber" v={c.source} />
           {c.notes && <Row k="Catatan impor" v={c.notes} />}

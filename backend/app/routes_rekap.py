@@ -114,7 +114,7 @@ class RekapIn(BaseModel):
     subJenis: str
     ringkasan: str
     waktuMasuk: str
-    waktuFirstResponse: str
+    waktuFirstResponse: Optional[str] = None
     waktuResolved: Optional[str] = None
     rootCause: Optional[str] = None
     picDept: Optional[str] = None
@@ -138,6 +138,8 @@ class RekapIn(BaseModel):
     qtyDiterima: Optional[int] = None
     produkFrozen: Optional[bool] = None
     waktuOrder: Optional[str] = None
+    reviewPlatform: Optional[str] = None
+    rating: Optional[int] = None
     force: bool = False
 
 
@@ -152,15 +154,19 @@ async def rekap(body: RekapIn, u=Depends(require(*WRITERS))):
 
 async def do_rekap(body: RekapIn, u, evidence_override=None):
     from .routes_cases import CaseIn, create_case, ResolveIn, resolve, out_case
-    masuk, fr = parse_iso(body.waktuMasuk), parse_iso(body.waktuFirstResponse)
+    masuk = parse_iso(body.waktuMasuk)
+    fr = parse_iso(body.waktuFirstResponse) if body.waktuFirstResponse else None
+    review_open = body.channel == "Review Online" and fr is None
+    if fr is None and (not review_open or body.waktuResolved or body.closed):
+        raise HTTPException(400, "Waktu dibalas wajib diisi.")
     res = parse_iso(body.waktuResolved) if body.waktuResolved else None
     t = now()
     for label, x in (("Waktu masuk", masuk), ("Waktu dibalas", fr), ("Waktu selesai", res)):
         if x and as_utc(x) > t:
             raise HTTPException(400, f"{label} tidak boleh di masa depan.")
-    if as_utc(fr) < as_utc(masuk):
+    if fr and as_utc(fr) < as_utc(masuk):
         raise HTTPException(400, "Waktu dibalas tidak boleh sebelum waktu masuk.")
-    if res and as_utc(res) < as_utc(fr):
+    if res and fr and as_utc(res) < as_utc(fr):
         raise HTTPException(400, "Waktu selesai tidak boleh sebelum waktu dibalas.")
     if (res or body.closed) and not (body.kompensasiKey and (body.rootCause or "").strip()):
         raise HTTPException(400, "Case yang sudah selesai wajib diisi root cause dan bentuk kompensasi.")
@@ -174,6 +180,8 @@ async def do_rekap(body: RekapIn, u, evidence_override=None):
         a = analyze(chat, body.chatCustomer)
         if _same_min(a.get("masuk"), masuk) and _same_min(a.get("dibalas"), fr):
             evidence = "chat"
+    if not evidence and body.channel == "Review Online" and not evidence_override:
+        evidence = "review"   # jam dari platform review; tidak dihitung SLA, tidak perlu screenshot
     if not evidence and evidence_override:
         evidence = evidence_override
     if not evidence:
@@ -186,13 +194,18 @@ async def do_rekap(body: RekapIn, u, evidence_override=None):
                 waktuMasuk=body.waktuMasuk, tipe=body.tipe, orderNo=body.orderNo, customerName=body.customerName,
                 customerPhone=body.customerPhone, photos=(body.photos or [])[:3], produk=body.produk,
                 kodeProduksi=body.kodeProduksi, ekspedisi=body.ekspedisi, noResi=body.noResi, qtyPesan=body.qtyPesan,
-                qtyDiterima=body.qtyDiterima, produkFrozen=body.produkFrozen, waktuOrder=body.waktuOrder, source="rekap",
+                qtyDiterima=body.qtyDiterima, produkFrozen=body.produkFrozen, waktuOrder=body.waktuOrder, reviewPlatform=body.reviewPlatform, rating=body.rating, source="rekap",
                 waktuMasukReason="Bulk input" if evidence == "bulk" else "Rekap dari WhatsApp", force=body.force)
     created = await create_case(ci, u)
     cid = created["caseId"]
+    if review_open:   # review belum ditindaklanjuti: tersimpan sebagai case Open
+        c = await get_case_or_404(cid)
+        c.update(recordMode="rekap", timeEvidence="review", rekapAt=t)
+        await save_case(c)
+        return out_case(c, u)
     c = await get_case_or_404(cid)
     c.update(waktuFirstResponse=fr, status="Responded", frBy=u["name"], recordMode="rekap", timeEvidence=evidence,
-             frtManual=evidence != "chat", rekapAt=t)
+             frtManual=evidence not in ("chat", "review"), rekapAt=t)
     if chat:
         c["chatText"], c["chatCustomer"] = chat, body.chatCustomer
     if body.photo:

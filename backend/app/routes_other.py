@@ -467,7 +467,8 @@ async def review_to_case(rid: str, u=Depends(require(*WRITERS))):
     sub = r.get("subJenis") if r.get("subJenis") in ctx["subJenis"] else "Lainnya: Rasa / Porsi"
     case_id = await next_case_id(outlet["type"])
     c = {"caseId": case_id, "brand": outlet.get("brand"), "outletId": outlet["id"], "outletType": outlet["type"],
-         "channel": "Review Online", "tipe": "Komplain", "subJenis": sub, "valid": "Y",
+         "channel": "Review Online", "reviewPlatform": r.get("platform"), "rating": r.get("rating"),
+         "tipe": "Komplain", "subJenis": sub, "valid": "Y",
          "ringkasan": f"[{r.get('platform')} ★{r.get('rating')}] {r.get('review')}", "orderNo": r.get("orderNo"),
          "waktuMasuk": r["tanggal"], "hasTime": True, "status": "Open", "reopenCount": 0, "csAgent": u["name"],
          "csAgentId": u["id"], "source": "review_online", "sourceRefId": rid, "createdBy": u["name"],
@@ -606,7 +607,7 @@ EXPORT_COLS = [
     ("PIC Dept", "picDept"), ("Bentuk Complimentary", "kompensasiLabel"), ("Nilai Complimentary (Rp)", "nilaiKompensasi"),
     ("Penanggung Jawab", "penanggungJawab"), ("Status", "status"), ("Customer Follow-up Ulang (Y/N)", "followUpUlang"),
     ("Reopen (Y/N)", "reopenCount"), ("CSAT (1–5)", "csat"), ("CS Agent", "csAgent"), ("Catatan", "notes"),
-    ("Jam Order Customer", "waktuOrder"), ("Order → Komplain (menit)", "orderToComplaintMin"), ("FRT jam kerja (menit)", "frtMin"), ("Waktu tunggu kalender (menit)", "waitMin"), ("Target FRT (menit)", "targetFrtMin"), ("SLA Response OK", "slaResponseOk"),
+    ("Platform Online", "reviewPlatform"), ("Rating", "rating"), ("Jam Order Customer", "waktuOrder"), ("Order → Komplain (menit)", "orderToComplaintMin"), ("FRT jam kerja (menit)", "frtMin"), ("Waktu tunggu kalender (menit)", "waitMin"), ("Target FRT (menit)", "targetFrtMin"), ("SLA Response OK", "slaResponseOk"),
     ("Resolution Time tanpa hari libur (menit)", "resolutionMin"), ("Resolution Time kalender (menit)", "resolutionCalMin"), ("Target Resolution (menit)", "targetResolutionMin"),
     ("Resolution SLA OK", "resolutionSlaOk"), ("Same Day", "sameDay"), ("FCR", "fcr"), ("Puas (CSAT ≥4)", "puas"),
     ("Jenis Komplain", "jenis"), ("Level Standard", "levelStandard"), ("Cost Center", "costCenter"),

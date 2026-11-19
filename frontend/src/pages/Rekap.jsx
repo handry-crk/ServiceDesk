@@ -216,7 +216,7 @@ export default function Rekap() {
 
 export function ModeTabs({ live, mode }) {
   const cur = mode || (live ? 'live' : 'rekap')
-  const tabs = [['rekap', '/catat', 'Rekap chat'], ['bulk', '/catat?mode=bulk', 'Bulk input'], ['live', '/catat?mode=live', 'Catat real time']]
+  const tabs = [['rekap', '/catat', 'Rekap chat'], ['bulk', '/catat?mode=bulk', 'Bulk input'], ['live', '/catat?mode=live', 'Catat real time'], ['harian', '/catat?mode=harian', 'Data harian']]
   return (
     <div className="flex flex-wrap gap-1 mb-4 bg-white border border-line rounded-xl p-1 w-fit">
       {tabs.map(([k, to, l]) => <Link key={k} to={to} className={`px-3 md:px-4 min-h-[38px] flex items-center rounded-lg text-sm font-semibold ${cur === k ? 'bg-brick text-white' : 'hover:bg-cream'}`}>{l}</Link>)}

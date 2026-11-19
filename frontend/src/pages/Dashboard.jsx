@@ -72,7 +72,7 @@ export function Volume({ d }) {
   const items = [
     ['Total customer contact', fmtNum(v.contact)], ['Inquiry', fmtNum(v.inquiry)], ['Komplain', fmtNum(v.komplain)],
     ['Komplain valid', fmtNum(v.komplainValid)], ['Masih open', fmtNum(v.open)],
-    ['Komplain per 1.000 trx', v.per1000 === null ? <Link to="/pengaturan?tab=transaksi" className="text-sm text-brick underline">Isi total transaksi</Link> : fmtNum(v.per1000), CARA_HITUNG.per1000],
+    ['Komplain per 1.000 trx', v.per1000 === null ? <Link to="/catat?mode=harian" className="text-sm text-brick underline">Isi transaksi harian</Link> : fmtNum(v.per1000), CARA_HITUNG.per1000],
     ['Biaya kompensasi', fmtRp(v.biaya)], ['Di luar standard', <span key="x">{fmtRp(v.biayaLuarStandard)} <span className="text-sm text-mute">({v.countLuarStandard} case)</span></span>],
     ['Komplain Critical', <span key="c" className="text-brick">{v.critical}</span>],
   ]

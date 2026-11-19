@@ -684,12 +684,19 @@ async def inbox(u=Depends(current_user), desk: Optional[str] = None):
 # ------------------------------------------------------------------ dashboard
 
 async def total_trx(frm: date, to: date):
-    """Total transaksi periode dari input bulanan, prorata per hari."""
+    """Total transaksi periode: pakai input harian bila ada, selain itu prorata dari input bulanan."""
     db = get_db()
+    daily = {x["tanggal"]: x.get("transaksi") async for x in
+             db.daily.find({"tanggal": {"$gte": frm.isoformat(), "$lte": to.isoformat()}, "transaksi": {"$gt": 0}})}
     total, have = 0.0, False
     d = frm
     cache = {}
     while d <= to:
+        if d.isoformat() in daily:
+            total += daily[d.isoformat()]
+            have = True
+            d += timedelta(days=1)
+            continue
         key = d.strftime("%Y-%m")
         if key not in cache:
             cache[key] = await db.monthly.find_one({"month": key})

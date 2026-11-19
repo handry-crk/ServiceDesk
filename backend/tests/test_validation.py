@@ -804,3 +804,22 @@ def test_platform_online_tiktok_go(ctx):
     t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\n06/05/2026\t10.00\t10.05\tTikTok Go\tJagakarsa\tHospitality\tbulk tiktok go"
     d = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()["rows"][0]["data"]
     assert d["channel"] == "Review Online" and d["platform"] == "TikTok Go"
+
+
+def test_daily_data(ctx):
+    c, H, o = ctx
+    A = login(c, "Agen", "123123")
+    for hh in (9, 11):
+        mk(c, H, o, ringkasan=f"harian {hh}", waktuMasuk=wib_iso(2026, 4, 7, hh, 0))
+    assert c.put("/api/daily", json={"tanggal": "2026-04-07", "transaksi": 2000, "komplain": 3}, headers=A).status_code == 200
+    assert c.put("/api/daily", json={"tanggal": "2099-01-01", "transaksi": 1}, headers=A).status_code == 400
+    assert c.put("/api/daily", json={"tanggal": "2026-04-07", "transaksi": -5}, headers=A).status_code == 400
+    assert c.put("/api/daily", json={"tanggal": "2026-04-07", "transaksi": 1}, headers=login(c, "Lihat", "123123")).status_code == 403
+    d = c.get("/api/daily", params={"from": "2026-04-06", "to": "2026-04-08"}, headers=A).json()
+    r = next(x for x in d["rows"] if x["tanggal"] == "2026-04-07")
+    assert r["tercatat"] == 2 and r["komplain"] == 3 and r["selisih"] == 1 and r["per1000"] == 1.5
+    assert d["summary"]["belumDirekap"] == 1 and d["summary"]["transaksi"] == 2000 and len(d["rows"]) == 3
+    dash = c.get("/api/dashboard", params={"from": "2026-04-07", "to": "2026-04-07"}, headers=H).json()
+    assert dash["period"]["totalTrx"] == 2000 and dash["volume"]["per1000"] == 1.0
+    c.put("/api/daily", json={"tanggal": "2026-04-07"}, headers=A)
+    assert c.get("/api/daily", params={"from": "2026-04-07", "to": "2026-04-07"}, headers=A).json()["rows"][0]["transaksi"] is None

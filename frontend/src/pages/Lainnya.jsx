@@ -5,6 +5,7 @@ import { Card } from '../ui.jsx'
 export default function Lainnya() {
   const { can, user, logout } = useApp()
   const items = [
+    { to: '/catat?mode=harian', t: 'Data harian', d: 'Jumlah transaksi dan jumlah komplain per hari; cek komplain yang belum direkap.' },
     { to: '/csat', t: 'CSAT Outlet', d: 'Respons form survei outlet, cocokkan outlet, link/QR survei.' },
     { to: '/review', t: 'Review & Rating Online', d: 'Review komplain GoFood/GrabFood, status tindak lanjut, rating per outlet.' },
     { to: '/voucher', t: 'Kode Voucher', d: 'Stok voucher kompensasi, status diterbitkan/terpakai.' },

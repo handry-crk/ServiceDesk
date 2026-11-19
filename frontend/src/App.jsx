@@ -7,6 +7,7 @@ import Inbox from './pages/Inbox.jsx'
 import Catat from './pages/Catat.jsx'
 import Rekap from './pages/Rekap.jsx'
 const Bulk = lazy(() => import('./pages/Bulk.jsx'))
+const Harian = lazy(() => import('./pages/Harian.jsx'))
 import Cases from './pages/Cases.jsx'
 import CaseDetail from './pages/CaseDetail.jsx'
 import { SurveiOutlet, SurveiCase } from './pages/Public.jsx'
@@ -38,7 +39,7 @@ const Icon = ({ d, className = 'w-6 h-6' }) => (
 function CatatMode() {
   const loc = useLocation()
   const mode = new URLSearchParams(loc.search).get('mode')
-  return mode === 'live' ? <Catat /> : mode === 'bulk' ? <Bulk /> : <Rekap />
+  return mode === 'live' ? <Catat /> : mode === 'bulk' ? <Bulk /> : mode === 'harian' ? <Harian /> : <Rekap />
 }
 
 function Bell() {

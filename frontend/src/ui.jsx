@@ -118,5 +118,5 @@ export const CARA_HITUNG = {
   compSuccess: 'Komplain valid yang mendapat kompensasi (selain Tidak Ada) ÷ komplain valid.',
   reopen: 'Case yang pernah dibuka ulang ÷ case Closed.',
   csat: 'Rating 4–5 dari survei per case (customer yang komplain) ÷ total rating. Survei dikirim CS setelah case Closed.',
-  per1000: 'Total komplain ÷ total transaksi periode × 1.000. Transaksi diisi per bulan di Pengaturan, diprorata per hari.',
+  per1000: 'Total komplain ÷ total transaksi periode × 1.000. Transaksi diambil dari Data harian (Catat → Data harian); hari yang belum diisi memakai prorata transaksi bulanan di Pengaturan.',
 }

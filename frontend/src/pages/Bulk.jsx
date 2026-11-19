@@ -57,7 +57,7 @@ export default function Bulk() {
           <span className="text-xs text-mute">atau blok baris di Excel / Google Sheets (termasuk judul kolom) → salin → tempel di bawah.</span>
         </div>
         <textarea className={inputCls + ' min-h-[160px] py-2 text-xs font-mono whitespace-pre'} wrap="off" value={text} onChange={(e) => { setText(e.target.value); setPv(null) }}
-          placeholder={'Tanggal\tJam Masuk\tJam Dibalas\tJam Selesai\tChannel\tOutlet\tSub Jenis\tRingkasan\tRoot Cause\tKompensasi\tNilai (Rp)\tStatus\tNama Customer\tNo HP\tNo Pesanan\n16/11/2026\t10.02\t10.05\t10.30\tWhatsApp\tJagakarsa\tMissing Item\tPesan 10 diterima 8\tKetelitian Crew\tReplacement\t\tSelesai'} />
+          placeholder={'Tanggal\tJam Masuk\tJam Dibalas\tJam Selesai\tChannel\tOutlet\tSub Jenis\tRingkasan\tRoot Cause\tKompensasi\tNilai (Rp)\tStatus\tNama Customer\tNo HP\tNo Pesanan\tJam Order\n16/11/2026\t10.02\t10.05\t10.30\tWhatsApp\tJagakarsa\tMissing Item\tPesan 10 diterima 8\tKetelitian Crew\tReplacement\t\tSelesai'} />
         <div className="text-xs text-mute">Wajib: Tanggal, Jam Masuk, Jam Dibalas, Channel, Outlet, Sub Jenis, Ringkasan. Status <b>Selesai</b> / <b>Closed</b> wajib Root Cause & Kompensasi. Outlet yang belum terdaftar dibuat otomatis (menunggu verifikasi). Maksimal 300 baris.</div>
         <ErrorBox error={err} />
         <Btn disabled={!text.trim() || busy} onClick={() => run(true)}>{busy && !pv ? 'Memeriksa…' : 'Periksa data'}</Btn>

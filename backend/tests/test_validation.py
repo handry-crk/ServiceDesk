@@ -749,3 +749,21 @@ def test_frozen_product_line_any_outlet(ctx):
     assert ol["volume"]["komplain"] == 1
     r = c.patch(f"/api/cases/{b['caseId']}", json={"produkFrozen": True}, headers=H).json()
     assert r["frozen"] is True and r["costCenter"] == "Team Frozen" and r["desk"] == "Online"
+
+
+def test_order_time(ctx):
+    c, H, o = ctx
+    m = wib_iso(2026, 7, 6, 12, 0)
+    assert mk(c, H, o, ringkasan="order salah", waktuMasuk=m, waktuOrder=wib_iso(2026, 7, 6, 12, 30)).status_code == 400
+    k = mk(c, H, o, ringkasan="order ok", waktuMasuk=m, waktuOrder=wib_iso(2026, 7, 6, 11, 15)).json()
+    assert k["orderToComplaintMin"] == 45 and k["waktuOrder"]
+    r = c.patch(f"/api/cases/{k['caseId']}", json={"waktuOrder": wib_iso(2026, 7, 6, 11, 0)}, headers=H).json()
+    assert r["orderToComplaintMin"] == 60
+    assert c.patch(f"/api/cases/{k['caseId']}", json={"waktuOrder": wib_iso(2026, 7, 6, 13, 0)}, headers=H).status_code == 400
+    r = c.patch(f"/api/cases/{k['caseId']}", json={"waktuOrder": ""}, headers=H).json()
+    assert r.get("orderToComplaintMin") is None
+    t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\tJam Order\n07/07/2026\t10.00\t10.03\tWhatsApp\tJagakarsa\tHospitality\torder bulk\t09.20\n08/07/2026\t00.30\t08.05\tWhatsApp\tJagakarsa\tHospitality\torder malam\t23.50"
+    p = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()
+    assert p["rows"][0]["data"]["order"].startswith("2026-07-07T09:20") and p["rows"][1]["data"]["order"].startswith("2026-07-07T23:50")
+    s = c.post("/api/cases/bulk", json={"text": t, "dryRun": False}, headers=H).json()
+    assert c.get(f"/api/cases/{s['created'][0]['caseId']}", headers=H).json()["orderToComplaintMin"] == 40

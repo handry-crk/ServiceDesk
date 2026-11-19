@@ -606,7 +606,7 @@ EXPORT_COLS = [
     ("PIC Dept", "picDept"), ("Bentuk Complimentary", "kompensasiLabel"), ("Nilai Complimentary (Rp)", "nilaiKompensasi"),
     ("Penanggung Jawab", "penanggungJawab"), ("Status", "status"), ("Customer Follow-up Ulang (Y/N)", "followUpUlang"),
     ("Reopen (Y/N)", "reopenCount"), ("CSAT (1–5)", "csat"), ("CS Agent", "csAgent"), ("Catatan", "notes"),
-    ("FRT jam kerja (menit)", "frtMin"), ("Waktu tunggu kalender (menit)", "waitMin"), ("Target FRT (menit)", "targetFrtMin"), ("SLA Response OK", "slaResponseOk"),
+    ("Jam Order Customer", "waktuOrder"), ("Order → Komplain (menit)", "orderToComplaintMin"), ("FRT jam kerja (menit)", "frtMin"), ("Waktu tunggu kalender (menit)", "waitMin"), ("Target FRT (menit)", "targetFrtMin"), ("SLA Response OK", "slaResponseOk"),
     ("Resolution Time tanpa hari libur (menit)", "resolutionMin"), ("Resolution Time kalender (menit)", "resolutionCalMin"), ("Target Resolution (menit)", "targetResolutionMin"),
     ("Resolution SLA OK", "resolutionSlaOk"), ("Same Day", "sameDay"), ("FCR", "fcr"), ("Puas (CSAT ≥4)", "puas"),
     ("Jenis Komplain", "jenis"), ("Level Standard", "levelStandard"), ("Cost Center", "costCenter"),

@@ -78,6 +78,7 @@ export default function CaseDetail() {
         </Card>
         <Card className="p-4">
           <h3 className="font-bold mb-2">Waktu & SLA</h3>
+          {c.waktuOrder && <Row k="Order customer" v={<span>{fmtDT(c.waktuOrder)}{c.orderToComplaintMin != null && <span className="text-xs text-mute"> · komplain {fmtMin(c.orderToComplaintMin)} kemudian</span>}</span>} />}
           <Row k="Masuk" v={fmtDT(c.waktuMasuk) + (c.hasTime === false ? ' (tanpa jam)' : '')} />
           <Row k="First response" v={<span>{fmtDT(c.waktuFirstResponse)}{c.frtManual && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-cream text-mute font-semibold" title="Jam dibalas diisi manual oleh CS">dicatat manual</span>}</span>} /><Row k="Resolved" v={fmtDT(c.waktuResolved)} /><Row k="Closed" v={fmtDT(c.waktuClosed)} />
           <Row k="FRT (jam kerja)" v={<span className={c.slaResponseOk === false ? 'text-brick' : c.slaResponseOk ? 'text-ok' : ''}>{fmtMin(c.frtMin)} / target {c.targetFrtMin} mnt</span>} />
@@ -375,14 +376,16 @@ function TimeSheet({ open, onClose, c, onDone }) {
 function EditSheet({ open, onClose, c, masters, onDone, limited }) {
   const [b, setB] = useState({})
   const fz = !!c.frozen || c.outletType === 'online_frozen'
-  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, deskOverride: c.deskOverride || '', produkFrozen: !!c.produkFrozen, tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
+  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, deskOverride: c.deskOverride || '', produkFrozen: !!c.produkFrozen, waktuOrderLocal: c.waktuOrder ? toLocalInput(c.waktuOrder) : '', tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
   const subs = (masters?.subJenis || []).map((s) => ({ value: s.name, label: s.name, sub: s.contoh, keywords: s.keywords, level: s.level }))
   const outlets = (masters?.outlets || []).map((o) => ({ value: o.id, label: o.name, sub: o.area }))
   const set = (k) => (e) => setB({ ...b, [k]: e.target ? e.target.value : e })
   const submit = () => {
-    const keys = limited ? ['rootCause', 'costCenterFinal', ...(fz ? ['kodeProduksi'] : [])] : Object.keys(b)
+    const keys = (limited ? ['rootCause', 'costCenterFinal', ...(fz ? ['kodeProduksi'] : [])] : Object.keys(b)).filter((k) => k !== 'waktuOrderLocal')
+    const oldOrder = c.waktuOrder ? toLocalInput(c.waktuOrder) : ''
+    const extraOrder = !limited && (b.waktuOrderLocal || '') !== oldOrder ? { waktuOrder: b.waktuOrderLocal ? fromLocalInput(b.waktuOrderLocal) : '' } : {}
     const num = (k, v) => (['qtyPesan', 'qtyDiterima'].includes(k) ? (v === '' ? null : Number(v)) : v)
-    onDone(Object.fromEntries(keys.filter((k) => String(b[k] ?? '') !== String(c[k] ?? '')).map((k) => [k, num(k, b[k])]).filter(([, v]) => v !== null)))
+    onDone(Object.fromEntries(keys.filter((k) => String(b[k] ?? '') !== String(c[k] ?? '')).map((k) => [k, num(k, b[k])]).filter(([, v]) => v !== null).concat(Object.entries(extraOrder))))
   }
   return (
     <Sheet open={open} onClose={onClose} title={limited ? (fz ? 'Root cause, cost center & kode produksi' : 'Root cause & cost center') : 'Ubah data case'} wide>
@@ -398,6 +401,7 @@ function EditSheet({ open, onClose, c, masters, onDone, limited }) {
           <Field label="Desk CS" hint="Otomatis dari channel & outlet. Ubah bila case harus ditangani desk lain."><select className={inputCls} value={b.deskOverride || ''} onChange={set('deskOverride')}><option value="">Otomatis ({deskLabel(c.deskOverride ? null : c.desk)})</option><option value="Online">CS Online / Marketplace</option><option value="Offline">CS Offline</option></select></Field>
           {c.outletType !== 'online_frozen' && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="w-5 h-5" checked={!!b.produkFrozen} onChange={(e) => setB({ ...b, produkFrozen: e.target.checked })} />Komplain produk Cimol Frozen (kemasan beku)</label>}
           <Field label="No. pesanan"><input className={inputCls} value={b.orderNo || ''} onChange={set('orderNo')} /></Field>
+          <Field label="Jam order customer"><input type="datetime-local" className={inputCls} value={b.waktuOrderLocal || ''} max={toLocalInput(c.waktuMasuk)} onChange={set('waktuOrderLocal')} /></Field>
           <Field label="Nama customer"><input className={inputCls} value={b.customerName || ''} onChange={set('customerName')} /></Field>
           <Field label="No. HP customer"><input className={inputCls} value={b.customerPhone || ''} onChange={set('customerPhone')} /></Field>
         </>}

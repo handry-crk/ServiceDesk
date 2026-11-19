@@ -6,7 +6,7 @@ import { Combo, levelItemBadge, PhotoPick, subJenisItems, FrozenSubChips } from 
 import { VoucherMsg } from './CaseDetail.jsx'
 
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
-const EMPTY = { produkFrozen: false, outletId: '', subJenis: '', ringkasan: '', masuk: '', dibalas: '', selesai: '', status: 'selesai', rootCause: '', kompensasiKey: '', nilai: '', followUpUlang: 'N', orderNo: '', customerName: '', customerPhone: '', produk: '', kodeProduksi: '', ekspedisi: '' }
+const EMPTY = { order: '', produkFrozen: false, outletId: '', subJenis: '', ringkasan: '', masuk: '', dibalas: '', selesai: '', status: 'selesai', rootCause: '', kompensasiKey: '', nilai: '', followUpUlang: 'N', orderNo: '', customerName: '', customerPhone: '', produk: '', kodeProduksi: '', ekspedisi: '' }
 
 export default function Rekap() {
   const { masters, loadMasters, notify, can } = useApp()
@@ -59,7 +59,7 @@ export default function Rekap() {
   const done = f.status !== 'proses'
   const frt = f.masuk && f.dibalas ? workMinutes(fromLocalInput(f.masuk), fromLocalInput(f.dibalas), masters?.settings) : null
   const missing = [!f.outletId && 'outlet', !f.subJenis && 'sub jenis', !f.ringkasan.trim() && 'ringkasan', !f.masuk && 'jam masuk', !f.dibalas && 'jam dibalas',
-    !fromChat && !photo && 'screenshot chat', done && !f.rootCause.trim() && 'root cause', done && !f.kompensasiKey && 'kompensasi'].filter(Boolean)
+    !fromChat && !photo && 'screenshot chat', f.order && f.masuk && f.order > f.masuk && 'jam order yang benar', done && !f.rootCause.trim() && 'root cause', done && !f.kompensasiKey && 'kompensasi'].filter(Boolean)
 
   if (!can(...WRITERS)) return <ErrorBox error={{ message: 'Peran Anda tidak bisa mencatat case.' }} />
 
@@ -79,7 +79,7 @@ export default function Rekap() {
         waktuResolved: done ? fromLocalInput(f.selesai || toLocalInput()) : null, rootCause: done ? f.rootCause : null, kompensasiKey: done ? f.kompensasiKey : null,
         nilaiKompensasi: done && f.nilai !== '' ? Number(f.nilai) : null, closed: f.status === 'closed', followUpUlang: f.followUpUlang,
         chatText: chat || null, chatCustomer: cust, photo, orderNo: f.orderNo || null, customerName: f.customerName || null, customerPhone: f.customerPhone || null,
-        produk: frozen ? f.produk || null : null, kodeProduksi: frozen ? f.kodeProduksi || null : null, ekspedisi: frozen ? f.ekspedisi || null : null, produkFrozen: !frozenStore && f.produkFrozen ? true : null, force,
+        produk: frozen ? f.produk || null : null, kodeProduksi: frozen ? f.kodeProduksi || null : null, ekspedisi: frozen ? f.ekspedisi || null : null, produkFrozen: !frozenStore && f.produkFrozen ? true : null, waktuOrder: f.order ? fromLocalInput(f.order) : null, force,
       }
       const r = await api('/cases/rekap', { method: 'POST', body })
       ls.set('sd_last_channel', channel)
@@ -142,6 +142,10 @@ export default function Rekap() {
 
         <div>
           <div className="text-sm font-semibold mb-2">3. Waktu</div>
+          <div className="mb-3"><Field label="Jam order customer" hint="Opsional. Jam customer memesan / membeli.">
+            <div className="flex flex-wrap gap-2 items-center"><input type="datetime-local" className={inputCls + ' !w-auto'} value={f.order} max={f.masuk || toLocalInput()} onChange={(e) => set('order', e.target.value)} />
+              {f.order && f.masuk && (f.order > f.masuk ? <span className="text-xs text-brick font-semibold">Tidak boleh setelah jam masuk</span> : <span className="text-xs text-mute">Komplain {fmtMin(Math.round((new Date(fromLocalInput(f.masuk)) - new Date(fromLocalInput(f.order))) / 60000))} setelah order</span>)}</div>
+          </Field></div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Masuk" required><input type="datetime-local" className={inputCls} value={f.masuk} max={toLocalInput()} onChange={(e) => set('masuk', e.target.value)} /></Field>
             <Field label="Dibalas pertama" required><input type="datetime-local" className={inputCls} value={f.dibalas} min={f.masuk} max={toLocalInput()} onChange={(e) => set('dibalas', e.target.value)} /></Field>

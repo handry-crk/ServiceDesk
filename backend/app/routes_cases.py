@@ -81,7 +81,23 @@ class CaseIn(BaseModel):
     sourceRefId: Optional[str] = None
     waktuMasukReason: Optional[str] = None
     produkFrozen: Optional[bool] = None
+    waktuOrder: Optional[str] = None
     force: bool = False
+
+
+def check_order_time(value, masuk):
+    """Jam order customer (opsional): tidak boleh di masa depan / setelah komplain masuk."""
+    if not value:
+        return None
+    try:
+        wo = parse_iso(value)
+    except Exception:
+        raise HTTPException(400, "Jam order tidak terbaca.")
+    if as_utc(wo) > now() + timedelta(minutes=2):
+        raise HTTPException(400, "Jam order tidak boleh di masa depan.")
+    if masuk and as_utc(wo) > as_utc(masuk) + timedelta(minutes=1):
+        raise HTTPException(400, "Jam order tidak boleh setelah waktu komplain masuk.")
+    return wo
 
 
 @router.get("/cases/check-duplicate")
@@ -107,6 +123,7 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
     w = parse_iso(body.waktuMasuk) if body.waktuMasuk else now()
     if w > now() + timedelta(minutes=2):
         raise HTTPException(400, "Waktu Masuk tidak boleh di masa depan.")
+    wo = check_order_time(body.waktuOrder, w)
     lag = (now() - as_utc(w)).total_seconds() / 60
     lag_max = ctx["settings"]["masukLagReasonMin"]
     if lag > lag_max and u["role"] not in LEAD and not (body.waktuMasukReason or "").strip():
@@ -135,6 +152,8 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
     sj = ctx["subJenis"][body.subJenis]
     if body.produkFrozen:
         c["produkFrozen"] = True
+    if wo:
+        c["waktuOrder"] = wo
     c["picDept"] = sj["picFrozen"] if (outlet["type"] == "online_frozen" or body.produkFrozen) else sj["picOutlet"]
     await save_case(c, ctx)
     await add_event(case_id, "created", u, {"channel": body.channel})
@@ -212,6 +231,7 @@ class PatchIn(BaseModel):
     qtyDiterima: Optional[int] = None
     deskOverride: Optional[str] = None
     produkFrozen: Optional[bool] = None
+    waktuOrder: Optional[str] = None
 
 
 @router.patch("/cases/{case_id}")
@@ -220,6 +240,8 @@ async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
     check_area(u, c)
     data = body.model_dump(exclude_none=True)
     limited = {"rootCause", "notes", "costCenterFinal", "kodeProduksi"}
+    if body.waktuOrder == "":
+        data["waktuOrder"] = ""
     if u["role"] in ("Manager Area", "Ops/QC"):
         if set(data) - limited:
             raise HTTPException(403, "Peran Anda hanya bisa mengisi root cause, catatan, cost center final, dan kode produksi.")
@@ -232,6 +254,8 @@ async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
         if data["deskOverride"] not in S.DESKS + [""]:
             raise HTTPException(400, "Desk tidak dikenal.")
         data["deskOverride"] = data["deskOverride"] or None
+    if "waktuOrder" in data:
+        data["waktuOrder"] = check_order_time(data["waktuOrder"], c.get("waktuMasuk")) if data["waktuOrder"] else None
     before = {k: c.get(k) for k in data}
     c.update(data)
     if "subJenis" in data and before.get("subJenis") != data["subJenis"]:

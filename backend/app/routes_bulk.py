@@ -40,6 +40,7 @@ COLS = [  # (kunci, judul di template, alias header)
     ("customerName", "Nama Customer", ["nama customer", "nama", "customer"]),
     ("customerPhone", "No HP", ["no hp", "no. hp", "hp", "whatsapp", "no wa", "no. wa"]),
     ("orderNo", "No Pesanan", ["no pesanan", "no. pesanan", "order", "order id"]),
+    ("order", "Jam Order", ["jam order", "waktu order", "jam pesan", "waktu pesan", "jam order customer"]),
 ]
 REQUIRED = ("tanggal", "masuk", "dibalas", "channel", "outlet", "subJenis", "ringkasan")
 _D1 = re.compile(r"(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})")
@@ -148,6 +149,17 @@ async def _check(rows, ctx, u):
             except ValueError:
                 v[k] = None
                 err.append(f"{label} tidak terbaca (pakai 10.05 atau 10:05)")
+        od = None
+        if r.get("order"):
+            try:
+                od = _dt(r["order"], base)
+                if v.get("masuk") and od > v["masuk"]:
+                    if _date(r["order"]):
+                        err.append("Jam Order setelah Jam Masuk")
+                    else:
+                        od -= timedelta(days=1)   # order kemarin malam, komplain hari ini
+            except ValueError:
+                err.append("Jam Order tidak terbaca (pakai 10.05 atau 10:05)")
         m, f, s = v.get("masuk"), v.get("dibalas"), v.get("selesai")
         if m and f and f < m and not _date(r.get("dibalas")):
             f = v["dibalas"] = f + timedelta(days=1)   # dibalas lewat tengah malam
@@ -217,7 +229,7 @@ async def _check(rows, ctx, u):
                              "kompensasi": komp["label"] if komp else None, "nilai": nilai,
                              "status": "Closed" if (closed and done) else "Selesai" if done else "Diproses",
                              "customerName": r.get("customerName") or None, "customerPhone": r.get("customerPhone") or None,
-                             "orderNo": r.get("orderNo") or None,
+                             "orderNo": r.get("orderNo") or None, "order": od.isoformat() if od else None,
                              "frtMin": round((f - m).total_seconds() / 60) if (m and f) else None}})
     return out
 
@@ -259,7 +271,7 @@ async def bulk(body: BulkIn, u=Depends(require(*WRITERS))):
                          waktuResolved=(d["selesai"] or d["dibalas"]) if done else None,
                          rootCause=d["rootCause"] if done else None, kompensasiKey=d["kompensasiKey"] if done else None,
                          nilaiKompensasi=d["nilai"] if done else None, closed=d["status"] == "Closed", followUpUlang="N",
-                         orderNo=d["orderNo"], customerName=d["customerName"], customerPhone=d["customerPhone"], force=True)
+                         orderNo=d["orderNo"], customerName=d["customerName"], customerPhone=d["customerPhone"], waktuOrder=d.get("order"), force=True)
             c = await do_rekap(rk, u, evidence_override="bulk")
             created.append({"row": r["row"], "caseId": c["caseId"], "kode": c.get("voucherCode")})
         except HTTPException as e:
@@ -314,10 +326,10 @@ async def bulk_template(u=Depends(require(*WRITERS))):
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = PatternFill("solid", fgColor="B42F27")
     ws.append(["16/11/2026", "10.02", "10.05", "10.30", "WhatsApp", "Jagakarsa", "Missing Item", "Pesan 10 pcs, diterima 8 pcs",
-               "Ketelitian Crew", "Replacement (porsi baru)", "", "Selesai", "Budi", "081211112222", ""])
+               "Ketelitian Crew", "Replacement (porsi baru)", "", "Selesai", "Budi", "081211112222", "", "09.40"])
     ws.append(["16/11/2026", "13.40", "13.44", "", "GoFood", "Kios Margonda", "Speed of Service", "Pesanan lama dibuat",
-               "", "", "", "Diproses", "", "", "F-1234567890"])
-    for i, w in enumerate([12, 10, 11, 11, 16, 24, 26, 40, 22, 28, 11, 11, 16, 15, 16]):
+               "", "", "", "Diproses", "", "", "F-1234567890", "13.05"])
+    for i, w in enumerate([12, 10, 11, 11, 16, 24, 26, 40, 22, 28, 11, 11, 16, 15, 16, 11]):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i + 1)].width = w
     ref = wb.create_sheet("Pilihan")
     ch = [c for c in ctx["channels"] if c not in ("CSAT Form", "Review Online")]

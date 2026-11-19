@@ -229,6 +229,7 @@ def compute_case(c: dict, ctx: dict) -> dict:
         c["masukLagMin"] = max(0, round((as_utc(c["createdAt"]) - as_utc(c["waktuMasuk"])).total_seconds() / 60))
     else:
         c["masukLagMin"] = None
+    c["orderToComplaintMin"] = _minutes(c["waktuOrder"], c["waktuMasuk"]) if (c.get("waktuOrder") and c.get("waktuMasuk")) else None
     tres = ctx["resTarget"].get(lvl) if lvl else None
     c["targetResolutionMin"] = tres
     c["resolutionDueAt"] = add_biz_minutes(c["waktuMasuk"], tres, st) if (has_time and tres and c.get("waktuMasuk")) else None

@@ -78,7 +78,7 @@ export default function CaseDetail() {
         </Card>
         <Card className="p-4">
           <h3 className="font-bold mb-2">Waktu & SLA</h3>
-          {c.waktuOrder && <Row k="Order customer" v={<span>{fmtDT(c.waktuOrder)}{c.orderToComplaintMin != null && <span className="text-xs text-mute"> · komplain {fmtMin(c.orderToComplaintMin)} kemudian</span>}</span>} />}
+          {c.waktuOrder && <Row k="Beli di outlet (jam order)" v={<span>{fmtDT(c.waktuOrder)}{c.orderToComplaintMin != null && <span className="text-xs text-mute"> · komplain {fmtMin(c.orderToComplaintMin)} kemudian</span>}</span>} />}
           <Row k="Masuk" v={fmtDT(c.waktuMasuk) + (c.hasTime === false ? ' (tanpa jam)' : '')} />
           <Row k="First response" v={<span>{fmtDT(c.waktuFirstResponse)}{c.frtManual && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-cream text-mute font-semibold" title="Jam dibalas diisi manual oleh CS">dicatat manual</span>}</span>} /><Row k="Resolved" v={fmtDT(c.waktuResolved)} /><Row k="Closed" v={fmtDT(c.waktuClosed)} />
           <Row k="FRT (jam kerja)" v={<span className={c.slaResponseOk === false ? 'text-brick' : c.slaResponseOk ? 'text-ok' : ''}>{fmtMin(c.frtMin)} / target {c.targetFrtMin} mnt</span>} />
@@ -401,7 +401,7 @@ function EditSheet({ open, onClose, c, masters, onDone, limited }) {
           <Field label="Desk CS" hint="Otomatis dari channel & outlet. Ubah bila case harus ditangani desk lain."><select className={inputCls} value={b.deskOverride || ''} onChange={set('deskOverride')}><option value="">Otomatis ({deskLabel(c.deskOverride ? null : c.desk)})</option><option value="Online">CS Online / Marketplace</option><option value="Offline">CS Offline</option></select></Field>
           {c.outletType !== 'online_frozen' && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="w-5 h-5" checked={!!b.produkFrozen} onChange={(e) => setB({ ...b, produkFrozen: e.target.checked })} />Komplain produk Cimol Frozen (kemasan beku)</label>}
           <Field label="No. pesanan"><input className={inputCls} value={b.orderNo || ''} onChange={set('orderNo')} /></Field>
-          <Field label="Jam order customer"><input type="datetime-local" className={inputCls} value={b.waktuOrderLocal || ''} max={toLocalInput(c.waktuMasuk)} onChange={set('waktuOrderLocal')} /></Field>
+          <Field label="Jam order customer (beli di gerobak / kios)"><input type="datetime-local" className={inputCls} value={b.waktuOrderLocal || ''} max={toLocalInput(c.waktuMasuk)} onChange={set('waktuOrderLocal')} /></Field>
           <Field label="Nama customer"><input className={inputCls} value={b.customerName || ''} onChange={set('customerName')} /></Field>
           <Field label="No. HP customer"><input className={inputCls} value={b.customerPhone || ''} onChange={set('customerPhone')} /></Field>
         </>}

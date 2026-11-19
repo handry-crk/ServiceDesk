@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, useApp, toLocalInput, fromLocalInput, compressImage, fmtMin, WRITERS, LEAD } from '../lib.jsx'
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge } from '../ui.jsx'
-import { Combo, levelItemBadge, subJenisItems, FrozenSubChips } from '../components.jsx'
+import { Combo, levelItemBadge, subJenisItems, FrozenSubChips, OrderTimeInput } from '../components.jsx'
 import { ModeTabs } from './Rekap.jsx'
 
 const FROZEN_KEYS = ['produkFrozen', 'produk', 'ekspedisi', 'noResi', 'kodeProduksi', 'qtyPesan', 'qtyDiterima']
@@ -81,7 +81,7 @@ export default function Catat() {
     try {
       const ex = Object.fromEntries(Object.entries(extra).filter(([k, v]) => v && (frozen || !FROZEN_KEYS.includes(k))))
       for (const k of ['qtyPesan', 'qtyDiterima']) if (ex[k]) ex[k] = Number(ex[k])
-      const body = { channel, outletId, subJenis, ringkasan, waktuMasuk: waktu ? fromLocalInput(waktu) : null, waktuMasukReason: needLag ? lagReason : null, waktuOrder: order ? fromLocalInput(order) : null, photos, force, ...ex }
+      const body = { channel, outletId, subJenis, ringkasan, waktuMasuk: waktu ? fromLocalInput(waktu) : null, waktuMasukReason: needLag ? lagReason : null, waktuOrder: order && !frozenStore ? fromLocalInput(order) : null, photos, force, ...ex }
       const c = await api('/cases', { method: 'POST', body })
       ls.set('sd_last_channel', channel)
       ls.set('sd_recent_outlets', [outletId, ...recentOutlets.filter((x) => x !== outletId)].slice(0, 5))
@@ -175,13 +175,9 @@ export default function Catat() {
           </div>
           <div className="text-xs text-mute mt-1">Isi jam pesan customer <b>masuk</b> (lihat di chat), bukan jam Anda mencatat.</div>
         </Field>
-        <Field label="Jam order customer" hint="Opsional. Jam customer memesan / membeli (lihat struk, aplikasi, atau tanya customer).">
-          <div className="flex flex-wrap gap-2 items-center">
-            <input type="datetime-local" className={inputCls + ' !w-auto !min-h-[40px]'} value={order} max={waktu || toLocalInput()} onChange={(e) => setOrder(e.target.value)} />
-            {order && <button type="button" className="text-xs text-brick underline" onClick={() => setOrder('')}>Hapus</button>}
-            {order && orderGap != null && (orderGap < 0 ? <span className="text-xs text-brick font-semibold">Jam order tidak boleh setelah waktu masuk</span> : <span className="text-xs text-mute">Komplain {fmtMin(orderGap)} setelah order</span>)}
-          </div>
-        </Field>
+        {!frozenStore && <Field label="Jam order customer" hint="Tanyakan ke customer: beli cimol di gerobak / kios jam berapa? Perkiraan boleh (mis. sekitar 15.00). Opsional bila customer tidak ingat.">
+          <OrderTimeInput masuk={waktu} value={order} onChange={setOrder} />
+        </Field>}
         {needLag && <Field label={`Kenapa baru dicatat ${lagMin} menit setelah masuk?`} required hint="Tercatat di case dan laporan integritas.">
           <input className={inputCls} value={lagReason} onChange={(e) => setLagReason(e.target.value)} placeholder="Mis. chat masuk di luar jam kerja, baru dibaca pagi" />
         </Field>}

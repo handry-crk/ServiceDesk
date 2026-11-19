@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fmtDT, fmtMin, fmtD, api, useApp, compressImage } from './lib.jsx'
+import { fmtDT, fmtMin, fmtD, api, useApp, compressImage, toLocalInput } from './lib.jsx'
 import { LevelBadge, StatusBadge, inputCls, Btn } from './ui.jsx'
 
 export function useNow(ms = 30000) {
@@ -177,6 +177,29 @@ export function FrozenSubChips({ masters, value, onChange }) {
           <div className="text-sm font-semibold flex items-center gap-2">{s.name}<LevelBadge level={s.level} /></div>
           <div className="text-xs text-mute">{s.frozenContoh}</div>
         </button>))}</div>
+    </div>
+  )
+}
+
+// Jam customer membeli di gerobak / kios (ditanyakan CS). Cukup isi jam; tanggal mengikuti hari komplain masuk.
+export function OrderTimeInput({ masuk, value, onChange }) {
+  const base = (masuk || toLocalInput()).slice(0, 10)
+  const prevDay = new Date(new Date(base + 'T00:00:00Z').getTime() - 864e5).toISOString().slice(0, 10)
+  const time = value ? value.slice(11, 16) : ''
+  const yesterday = !!value && value.slice(0, 10) !== base
+  const put = (t, y) => onChange(t ? `${y ? prevDay : base}T${t}` : '')
+  const gap = value ? Math.round((new Date((masuk || toLocalInput()) + ':00+07:00') - new Date(value + ':00+07:00')) / 60000) : null
+  const chip = (on) => `px-3 h-9 rounded-lg border text-sm font-semibold ${on ? 'border-brick bg-brick-soft text-brick' : 'border-line bg-white'}`
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input type="time" className={inputCls + ' !w-auto !min-h-[40px]'} value={time} onChange={(e) => put(e.target.value, yesterday)} />
+        <button type="button" className={chip(!yesterday)} onClick={() => put(time, false)}>Hari yang sama</button>
+        <button type="button" className={chip(yesterday)} onClick={() => put(time, true)}>Kemarin</button>
+        {value && <button type="button" className="text-xs text-brick underline" onClick={() => onChange('')}>Hapus</button>}
+      </div>
+      {value && (gap < 0 ? <div className="text-xs text-brick font-semibold mt-1">Jam beli tidak boleh setelah komplain masuk. Bila belinya kemarin, pilih "Kemarin".</div>
+        : <div className="text-xs text-mute mt-1">Komplain masuk {fmtMin(gap)} setelah beli</div>)}
     </div>
   )
 }

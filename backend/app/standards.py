@@ -24,14 +24,18 @@ CHANNELS = [
      "orderRequired": True, "desk": "Online"},
     # Online Food Aggregator — target awal 15 menit (asumsi; sesuaikan di Pengaturan → Target & SLA)
     {"name": "GoFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
-     "orderRequired": True, "desk": "Online"},
+     "orderRequired": True, "desk": "Online", "hidden": True},
     {"name": "GrabFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
-     "orderRequired": True, "desk": "Online"},
+     "orderRequired": True, "desk": "Online", "hidden": True},
     {"name": "ShopeeFood", "targetFrt": 15, "excellent": 10, "countInSla": True, "group": "Online Food Aggregator",
-     "orderRequired": True, "desk": "Online"},
+     "orderRequired": True, "desk": "Online", "hidden": True},
     {"name": "CSAT Form", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Survei & Review"},
-    {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Survei & Review"},
+    {"name": "Review Online", "targetFrt": 1440, "excellent": None, "countInSla": False, "group": "Platform Online",
+     "orderRequired": True},
 ]
+
+# Channel aggregator tidak lagi dipilih saat mencatat: dicatat sebagai Review Online + Platform Online.
+HIDDEN_CHANNELS = ["GoFood", "GrabFood", "ShopeeFood"]
 
 # Desk CS: Online/Marketplace (frozen marketplace + online food aggregator) dan Offline (outlet / gerobak)
 DESKS = ["Online", "Offline"]
@@ -83,7 +87,7 @@ def normalize_courier(text):
     return "Lainnya"
 
 
-REVIEW_PLATFORMS = ["GoFood", "GrabFood", "ShopeeFood"]
+REVIEW_PLATFORMS = ["GoFood", "GrabFood", "ShopeeFood", "TikTok Go"]
 
 TIPE = ["Komplain", "Inquiry", "Advice and Suggestion"]
 

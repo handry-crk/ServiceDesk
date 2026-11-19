@@ -58,7 +58,7 @@ export default function Bulk() {
         </div>
         <textarea className={inputCls + ' min-h-[160px] py-2 text-xs font-mono whitespace-pre'} wrap="off" value={text} onChange={(e) => { setText(e.target.value); setPv(null) }}
           placeholder={'Tanggal\tJam Masuk\tJam Dibalas\tJam Selesai\tChannel\tOutlet\tSub Jenis\tRingkasan\tRoot Cause\tKompensasi\tNilai (Rp)\tStatus\tNama Customer\tNo HP\tNo Pesanan\tPlatform Online\tRating\tJam Order\n16/11/2026\t10.02\t10.05\t10.30\tWhatsApp\tJagakarsa\tMissing Item\tPesan 10 diterima 8\tKetelitian Crew\tReplacement\t\tSelesai'} />
-        <div className="text-xs text-mute">Wajib: Tanggal, Jam Masuk, Jam Dibalas, Channel, Outlet, Sub Jenis, Ringkasan. Status <b>Selesai</b> / <b>Closed</b> wajib Root Cause & Kompensasi. Review online: Channel = Review Online + kolom Platform Online. Outlet yang belum terdaftar dibuat otomatis (menunggu verifikasi). Maksimal 300 baris.</div>
+        <div className="text-xs text-mute">Wajib: Tanggal, Jam Masuk, Jam Dibalas, Channel, Outlet, Sub Jenis, Ringkasan. Status <b>Selesai</b> / <b>Closed</b> wajib Root Cause & Kompensasi. Platform online (GoFood, GrabFood, ShopeeFood, TikTok Go): Channel = Review Online + kolom Platform Online. Outlet yang belum terdaftar dibuat otomatis (menunggu verifikasi). Maksimal 300 baris.</div>
         <ErrorBox error={err} />
         <Btn disabled={!text.trim() || busy} onClick={() => run(true)}>{busy && !pv ? 'Memeriksa…' : 'Periksa data'}</Btn>
       </Card>

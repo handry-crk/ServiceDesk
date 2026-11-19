@@ -695,7 +695,7 @@ def test_bulk_input(ctx):
     assert p["dryRun"] and p["summary"] == {"rows": 5, "ok": 3, "error": 2, "warning": 1, "dup": 0}, p["summary"]
     r = p["rows"]
     assert r[0]["data"]["kompensasiKey"] == "maj-replacement" and r[0]["data"]["frtMin"] == 3
-    assert r[1]["data"]["channel"] == "GoFood" and r[1]["data"]["status"] == "Diproses"
+    assert r[1]["data"]["channel"] == "Review Online" and r[1]["data"]["platform"] == "GoFood" and r[1]["data"]["status"] == "Diproses"
     assert r[2]["data"]["dibalas"].startswith("2026-11-03T00:10") and any("belum terdaftar" in w for w in r[2]["warnings"])
     assert any("Jam Masuk" in e for e in r[3]["errors"]) and any("Sub Jenis" in e for e in r[3]["errors"])
     assert any("Kompensasi kosong" in e for e in r[4]["errors"])
@@ -790,3 +790,17 @@ def test_review_online_as_case(ctx):
     k = c.get(f"/api/cases/{s['created'][0]['caseId']}", headers=H).json()
     assert k["status"] == "Open" and k["reviewPlatform"] == "ShopeeFood" and k["rating"] == 2
     from app.routes_cases import review_summary
+
+
+def test_platform_online_tiktok_go(ctx):
+    c, H, o = ctx
+    m = c.get("/api/masters", headers=H).json()
+    assert "TikTok Go" in m["reviewPlatforms"]
+    ch = {x["name"]: x for x in m["channels"]}
+    assert ch["GoFood"]["hidden"] and ch["GrabFood"]["hidden"] and ch["ShopeeFood"]["hidden"] and not ch["Review Online"].get("hidden")
+    r = c.post("/api/cases/rekap", json={"channel": "Review Online", "outletId": o["Jagakarsa"], "subJenis": "Hospitality", "ringkasan": "tiktok go",
+               "waktuMasuk": wib_iso(2026, 5, 5, 10, 0), "reviewPlatform": "TikTok Go", "force": True}, headers=H).json()
+    assert r["reviewPlatform"] == "TikTok Go"
+    t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\n06/05/2026\t10.00\t10.05\tTikTok Go\tJagakarsa\tHospitality\tbulk tiktok go"
+    d = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()["rows"][0]["data"]
+    assert d["channel"] == "Review Online" and d["platform"] == "TikTok Go"

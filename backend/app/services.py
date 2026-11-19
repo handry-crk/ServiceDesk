@@ -66,6 +66,8 @@ async def seed_if_empty():
     if await db.cases.count_documents({"$or": [{"desk": {"$exists": False}}, {"frozen": {"$exists": False}},
                                                 {"frozen": True, "desk": "Offline", "deskOverride": None}]}):
         await recompute_all()
+    # migrasi: channel Online Food Aggregator disembunyikan dari form (data lama tetap terbaca)
+    await db.channels.update_many({"name": {"$in": S.HIDDEN_CHANNELS}, "hidden": {"$exists": False}}, {"$set": {"hidden": True}})
     # migrasi: tanda & contoh khas frozen pada sub jenis (kata kunci ditambahkan, tidak menimpa)
     for i, (name, contoh, kw) in enumerate(S.FROZEN_SUBS):
         cur = await db.sub_jenis.find_one({"name": name})

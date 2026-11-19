@@ -11,7 +11,7 @@ const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?
 export default function Catat() {
   const { masters, notify, can } = useApp()
   const nav = useNavigate()
-  const [channel, setChannel] = useState(() => ls.get('sd_last_channel', 'WhatsApp'))
+  const [channel, setChannel] = useState(() => (['GoFood', 'GrabFood', 'ShopeeFood'].includes(ls.get('sd_last_channel', 'WhatsApp')) ? 'WhatsApp' : ls.get('sd_last_channel', 'WhatsApp')))
   const [outletId, setOutletId] = useState('')
   const [subJenis, setSubJenis] = useState('')
   const [ringkasan, setRingkasan] = useState('')
@@ -34,7 +34,7 @@ export default function Catat() {
   const ch = masters?.channels.find((c) => c.name === channel)
   const chGroups = useMemo(() => {
     const g = {}
-    ;(masters?.channels || []).filter((c) => c.name !== 'CSAT Form')
+    ;(masters?.channels || []).filter((c) => c.name !== 'CSAT Form' && !c.hidden)
       .forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
     return Object.entries(g)
   }, [masters])
@@ -106,7 +106,7 @@ export default function Catat() {
     <div className="max-w-2xl mx-auto">
       <ModeTabs live />
       <h1 className="text-2xl font-extrabold mb-1">Catat komplain (real time)</h1>
-      <p className="text-sm text-mute mb-4">5 isian saja (+ No. Pesanan untuk GoFood, GrabFood, ShopeeFood & marketplace). Level, PJ, cost center, dan target SLA terisi otomatis.</p>
+      <p className="text-sm text-mute mb-4">5 isian saja (+ No. Pesanan untuk marketplace). Komplain dari GoFood, GrabFood, ShopeeFood, TikTok Go: pilih Review Online lalu platformnya. Level, PJ, cost center, dan target SLA terisi otomatis.</p>
       <Card className="p-4 space-y-5">
         <Field label="Channel" required>
           <div className="space-y-2">{chGroups.map(([g, list]) => (
@@ -115,7 +115,7 @@ export default function Catat() {
           ))}</div>
         </Field>
         {channel === 'Review Online' && <div className="rounded-xl border border-line p-3 bg-white space-y-3">
-          <Field label="Platform Online" required><div className="flex flex-wrap gap-2">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood']).map((x) => <Chip key={x} active={extra.reviewPlatform === x} onClick={() => setExtra({ ...extra, reviewPlatform: x })}>{x}</Chip>)}</div></Field>
+          <Field label="Platform Online" required><div className="flex flex-wrap gap-2">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood', 'TikTok Go']).map((x) => <Chip key={x} active={extra.reviewPlatform === x} onClick={() => setExtra({ ...extra, reviewPlatform: x })}>{x}</Chip>)}</div></Field>
           <Field label="Rating di platform"><div className="flex gap-2">{[1, 2, 3, 4, 5].map((n) => <Chip key={n} active={String(extra.rating) === String(n)} onClick={() => setExtra({ ...extra, rating: n })}>{n} ★</Chip>)}</div></Field>
         </div>}
         <Field label="Outlet" required><Combo items={outlets} value={outletId} onChange={setOutletId} placeholder="Ketik nama outlet…" recent={recentOutlets} /></Field>

@@ -11,7 +11,7 @@ const EMPTY = { reviewPlatform: '', rating: '', order: '', produkFrozen: false, 
 export default function Rekap() {
   const { masters, loadMasters, notify, can } = useApp()
   const [sp] = useSearchParams()
-  const [channel, setChannel] = useState(() => sp.get('channel') === 'review' ? 'Review Online' : ls.get('sd_last_channel', 'WhatsApp'))
+  const [channel, setChannel] = useState(() => sp.get('channel') === 'review' ? 'Review Online' : (['GoFood', 'GrabFood', 'ShopeeFood'].includes(ls.get('sd_last_channel', 'WhatsApp')) ? 'WhatsApp' : ls.get('sd_last_channel', 'WhatsApp')))
   const [chat, setChat] = useState('')
   const [parsed, setParsed] = useState(null)
   const [parseErr, setParseErr] = useState(null)
@@ -30,7 +30,7 @@ export default function Rekap() {
   const outlets = useMemo(() => (masters?.outlets || []).filter((o) => o.active).map((o) => ({ value: o.id, label: o.name + (o.pending ? ' (menunggu verifikasi)' : ''), sub: `${o.area} · ${o.type.replace('_', ' ')}`, keywords: (o.aliases || []).join(' ') })), [masters])
   const chGroups = useMemo(() => {
     const g = {}
-    ;(masters?.channels || []).filter((c) => c.name !== 'CSAT Form').forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
+    ;(masters?.channels || []).filter((c) => c.name !== 'CSAT Form' && !c.hidden).forEach((c) => { (g[c.group || 'Lainnya'] = g[c.group || 'Lainnya'] || []).push(c.name) })
     return Object.entries(g)
   }, [masters])
   const sj = masters?.subJenis.find((s) => s.name === f.subJenis)
@@ -126,9 +126,9 @@ export default function Rekap() {
               <div className="flex flex-wrap gap-2">{list.map((c) => <Chip key={c} active={channel === c} onClick={() => setChannel(c)}>{c}</Chip>)}</div></div>))}</div>
         </Field>
         {isReview && <div className="rounded-xl border border-line p-3 bg-white space-y-3">
-          <Field label="Platform Online" required><div className="flex flex-wrap gap-2">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood']).map((x) => <Chip key={x} active={f.reviewPlatform === x} onClick={() => set('reviewPlatform', x)}>{x}</Chip>)}</div></Field>
+          <Field label="Platform Online" required><div className="flex flex-wrap gap-2">{(masters?.reviewPlatforms || ['GoFood', 'GrabFood', 'ShopeeFood', 'TikTok Go']).map((x) => <Chip key={x} active={f.reviewPlatform === x} onClick={() => set('reviewPlatform', x)}>{x}</Chip>)}</div></Field>
           <Field label="Rating di platform"><div className="flex gap-2">{[1, 2, 3, 4, 5].map((n) => <Chip key={n} active={String(f.rating) === String(n)} onClick={() => set('rating', String(f.rating) === String(n) ? '' : n)}>{n} ★</Chip>)}</div></Field>
-          <div className="text-xs text-mute">Review online diisi dengan kolom yang sama seperti komplain biasa. Waktu masuk = tanggal-jam review. Jam dibalas boleh kosong bila review belum ditindaklanjuti (pilih "Masih diproses").</div>
+          <div className="text-xs text-mute">Untuk semua komplain & review dari platform online. Diisi dengan kolom yang sama seperti komplain biasa. Waktu masuk = tanggal-jam review. Jam dibalas boleh kosong bila review belum ditindaklanjuti (pilih "Masih diproses").</div>
         </div>}
         <Field label="Outlet" required>
           <Combo items={outlets} value={f.outletId} onChange={(v) => set('outletId', v)} placeholder="Ketik nama outlet…" recent={ls.get('sd_recent_outlets', [])} />

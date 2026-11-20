@@ -168,6 +168,9 @@ async def do_rekap(body: RekapIn, u, evidence_override=None):
         raise HTTPException(400, "Waktu dibalas tidak boleh sebelum waktu masuk.")
     if res and fr and as_utc(res) < as_utc(fr):
         raise HTTPException(400, "Waktu selesai tidak boleh sebelum waktu dibalas.")
+    if body.subJenis == S.NO_COMPLAINT and (res or body.closed):   # tanpa keluhan: tidak perlu root cause / kompensasi
+        body.kompensasiKey = body.kompensasiKey or "all-none"
+        body.rootCause = (body.rootCause or "").strip() or "Tidak ada keluhan"
     if (res or body.closed) and not (body.kompensasiKey and (body.rootCause or "").strip()):
         raise HTTPException(400, "Case yang sudah selesai wajib diisi root cause dan bentuk kompensasi.")
     if body.closed and body.followUpUlang not in ("Y", "N"):

@@ -73,6 +73,11 @@ async def seed_if_empty():
         await recompute_all()
     # migrasi: channel Online Food Aggregator disembunyikan dari form (data lama tetap terbaca)
     await db.channels.update_many({"name": {"$in": S.HIDDEN_CHANNELS}, "hidden": {"$exists": False}}, {"$set": {"hidden": True}})
+    # migrasi: sub jenis "No Complaint" (kontak / review tanpa keluhan)
+    if not await db.sub_jenis.find_one({"name": S.NO_COMPLAINT}):
+        nc = next(dict(x) for x in S.SUB_JENIS if x["name"] == S.NO_COMPLAINT)
+        nc["order"] = await db.sub_jenis.count_documents({})
+        await db.sub_jenis.insert_one(nc)
     # migrasi: tanda & contoh khas frozen pada sub jenis (kata kunci ditambahkan, tidak menimpa)
     for i, (name, contoh, kw) in enumerate(S.FROZEN_SUBS):
         cur = await db.sub_jenis.find_one({"name": name})

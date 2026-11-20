@@ -52,7 +52,7 @@ export default function CaseDetail() {
           <div className="flex flex-wrap gap-2 mt-4 no-print">
             {!c.waktuFirstResponse && <Btn kind="ok" size="lg" onClick={() => act('respond', undefined, 'Ditandai sudah dibalas')}>Sudah dibalas</Btn>}
             {!c.waktuFirstResponse && <Btn kind="ghost" onClick={() => setSheet('respond')}>Dibalas jam lain…</Btn>}
-            {['Open', 'Responded'].includes(c.status) && <Btn size="lg" onClick={() => setSheet('resolve')}>Selesai (Resolved)</Btn>}
+            {['Open', 'Responded'].includes(c.status) && <Btn size="lg" onClick={() => c.subJenis === 'No Complaint' ? act('resolve', { rootCause: 'Tidak ada keluhan', kompensasiKey: 'all-none' }, 'Case selesai') : setSheet('resolve')}>Selesai (Resolved)</Btn>}
             {c.status === 'Resolved' && <Btn size="lg" onClick={() => setSheet('close')}>Closed (customer confirm)</Btn>}
             {['Resolved', 'Closed'].includes(c.status) && <Btn kind="ghost" onClick={() => setSheet('reopen')}>Buka ulang</Btn>}
             <Btn kind="ghost" onClick={() => setSheet('note')}>Tambah catatan</Btn>

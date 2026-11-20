@@ -214,7 +214,10 @@ async def _check(rows, ctx, u):
             pool = [k for k in ctx["kompensasi"].values()]
             pref = [k for k in pool if k["level"] in (level, "Semua")] or pool
             txt = _norm(r.get("kompensasi"))
-            if not txt:
+            if sj == S.NO_COMPLAINT:
+                komp = ctx["kompensasi"].get("all-none")
+                r["rootCause"] = r.get("rootCause") or "Tidak ada keluhan"
+            elif not txt:
                 err.append("Kompensasi kosong (case selesai). Isi mis. Apologize / Replacement / Refund / Tidak Ada")
             else:
                 for group in (pref, pool):

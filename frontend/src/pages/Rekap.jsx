@@ -59,9 +59,10 @@ export default function Rekap() {
   const isReview = channel === 'Review Online'
   const fromChat = isReview || (parsed?.masuk && parsed?.dibalas && f.masuk === toLocalInput(parsed.masuk) && f.dibalas === toLocalInput(parsed.dibalas))
   const done = f.status !== 'proses'
+  const noComplaint = f.subJenis === 'No Complaint'
   const frt = f.masuk && f.dibalas ? workMinutes(fromLocalInput(f.masuk), fromLocalInput(f.dibalas), masters?.settings) : null
   const missing = [!f.outletId && 'outlet', !f.subJenis && 'sub jenis', !f.ringkasan.trim() && 'ringkasan', !f.masuk && 'jam masuk', !f.dibalas && !(isReview && !done) && 'jam dibalas', isReview && !f.reviewPlatform && 'platform online',
-    !fromChat && !photo && 'screenshot chat', !frozenStore && f.order && f.masuk && f.order > f.masuk && 'jam order yang benar', done && !f.rootCause.trim() && 'root cause', done && !f.kompensasiKey && 'kompensasi'].filter(Boolean)
+    !fromChat && !photo && 'screenshot chat', !frozenStore && f.order && f.masuk && f.order > f.masuk && 'jam order yang benar', done && !noComplaint && !f.rootCause.trim() && 'root cause', done && !noComplaint && !f.kompensasiKey && 'kompensasi'].filter(Boolean)
 
   if (!can(...WRITERS)) return <ErrorBox error={{ message: 'Peran Anda tidak bisa mencatat case.' }} />
 
@@ -78,7 +79,7 @@ export default function Rekap() {
     try {
       const body = {
         channel, outletId: f.outletId, subJenis: f.subJenis, ringkasan: f.ringkasan, waktuMasuk: fromLocalInput(f.masuk), waktuFirstResponse: f.dibalas ? fromLocalInput(f.dibalas) : null, reviewPlatform: isReview ? f.reviewPlatform : null, rating: isReview && f.rating ? Number(f.rating) : null,
-        waktuResolved: done ? fromLocalInput(f.selesai || toLocalInput()) : null, rootCause: done ? f.rootCause : null, kompensasiKey: done ? f.kompensasiKey : null,
+        waktuResolved: done ? fromLocalInput(f.selesai || toLocalInput()) : null, rootCause: done && !noComplaint ? f.rootCause : null, kompensasiKey: done && !noComplaint ? f.kompensasiKey : null,
         nilaiKompensasi: done && f.nilai !== '' ? Number(f.nilai) : null, closed: f.status === 'closed', followUpUlang: f.followUpUlang,
         chatText: chat || null, chatCustomer: cust, photo, orderNo: f.orderNo || null, customerName: f.customerName || null, customerPhone: f.customerPhone || null,
         produk: frozen ? f.produk || null : null, kodeProduksi: frozen ? f.kodeProduksi || null : null, ekspedisi: frozen ? f.ekspedisi || null : null, produkFrozen: !frozenStore && f.produkFrozen ? true : null, waktuOrder: f.order && !frozenStore ? fromLocalInput(f.order) : null, force,
@@ -138,7 +139,8 @@ export default function Rekap() {
           {outlet?.pending && <div className="text-xs text-[#7A5410] mt-1">Outlet ini menunggu verifikasi CRM Supervisor. Case tetap tersimpan.</div>}
         </Field>
         {f.outletId && !frozenStore && <label className="flex items-start gap-2 text-sm rounded-xl border border-line p-3 bg-white"><input type="checkbox" className="w-5 h-5 mt-0.5" checked={f.produkFrozen} onChange={(e) => set('produkFrozen', e.target.checked)} /><span><b>Komplain produk Cimol Frozen</b> (kemasan beku) yang dibeli di outlet / agen / channel ini<span className="block text-xs text-mute">Centang agar ditangani CS Online / Marketplace dan masuk dashboard & aturan frozen (PIC, cost center, kode produksi).</span></span></label>}
-        <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “kurang”, “pecah”, “bocor”, “telat”.">{frozen && <FrozenSubChips masters={masters} value={f.subJenis} onChange={(v) => set('subJenis', v)} />}<Combo items={subs} value={f.subJenis} onChange={(v) => set('subJenis', v)} placeholder={frozen ? 'Atau ketik masalahnya…' : 'Ketik masalahnya…'} renderBadge={levelItemBadge} /></Field>
+        <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “kurang”, “pecah”, “bocor”, “telat”.">{frozen && <FrozenSubChips masters={masters} value={f.subJenis} onChange={(v) => set('subJenis', v)} />}<Combo items={subs} value={f.subJenis} onChange={(v) => set('subJenis', v)} placeholder={frozen ? 'Atau ketik masalahnya…' : 'Ketik masalahnya…'} renderBadge={levelItemBadge} />
+          {!noComplaint && <button type="button" className="text-xs text-brick underline mt-1" onClick={() => set('subJenis', 'No Complaint')}>Tidak ada keluhan (pujian, pertanyaan, rating bagus)? Pilih No Complaint</button>}</Field>
         <Field label="Ringkasan masalah" required hint="Terisi dari pesan customer; rapikan seperlunya."><textarea className={inputCls + ' min-h-[72px] py-2'} value={f.ringkasan} onChange={(e) => set('ringkasan', e.target.value)} /></Field>
         {ch?.orderRequired && <Field label={`No. Pesanan ${channel}`}><input className={inputCls} value={f.orderNo} onChange={(e) => set('orderNo', e.target.value.trim())} /></Field>}
         {frozen && <div className="grid gap-3 sm:grid-cols-3">
@@ -167,7 +169,8 @@ export default function Rekap() {
         <div>
           <div className="text-sm font-semibold mb-2">4. Penyelesaian</div>
           <div className="flex flex-wrap gap-2 mb-3">{[['proses', 'Masih diproses'], ['selesai', 'Selesai'], ['closed', 'Selesai & customer sudah konfirmasi']].map(([k, l]) => <Chip key={k} active={f.status === k} onClick={() => set('status', k)}>{l}</Chip>)}</div>
-          {done && <div className="space-y-3">
+          {done && noComplaint && <div className="text-sm bg-cream rounded-xl p-3">No Complaint: tidak perlu root cause dan kompensasi. Tercatat sebagai kontak, tidak dihitung sebagai komplain.</div>}
+          {done && !noComplaint && <div className="space-y-3">
             <Field label="Root cause" required>
               <div className="flex flex-wrap gap-2 mb-2">{(sj?.rootCauses || []).map((r) => <Chip key={r} active={f.rootCause === r} onClick={() => set('rootCause', r)} className="!min-h-[34px] text-xs">{r}</Chip>)}</div>
               <input className={inputCls} value={f.rootCause} onChange={(e) => set('rootCause', e.target.value)} placeholder="Atau tulis sendiri" />

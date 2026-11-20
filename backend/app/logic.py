@@ -146,6 +146,13 @@ def add_biz_minutes(t, mins, st=None):
 def compute_case(c: dict, ctx: dict) -> dict:
     """Isi semua kolom otomatis. Mengubah dan mengembalikan dict case."""
     sj = ctx["subJenis"].get(c.get("subJenis") or "")
+    # No Complaint: tetap tercatat sebagai kontak, tetapi tidak dihitung sebagai komplain
+    if c.get("subJenis") == S.NO_COMPLAINT:
+        if c.get("tipe", "Komplain") == "Komplain":
+            c["tipe"] = "No Complaint"
+        c["level"] = None
+    elif c.get("tipe") == "No Complaint":
+        c["tipe"] = "Komplain"
     outlet = ctx["outlets"].get(c.get("outletId")) or {}
     otype = c.get("outletType") or outlet.get("type") or "gerobak"
     c["outletType"] = otype
@@ -190,6 +197,8 @@ def compute_case(c: dict, ctx: dict) -> dict:
         c["kompensasiOutsideStandard"] = c["kompensasiJenis"] in ("Refund", "Tidak Ada") or \
             bool(c.get("kompensasiForceOutside"))
     else:
+        c["kompensasiOutsideStandard"] = False
+    if c.get("subJenis") == S.NO_COMPLAINT:
         c["kompensasiOutsideStandard"] = False
 
     # target & SLA
@@ -276,7 +285,7 @@ def data_issues(c, pj_auto):
             break
     if not c.get("hasTime", True):
         iss.append("Waktu tanpa jam")
-    if c.get("waktuResolved") and not c.get("rootCause"):
+    if c.get("waktuResolved") and not c.get("rootCause") and c.get("subJenis") != S.NO_COMPLAINT:
         iss.append("Resolved tanpa root cause")
     if c.get("waktuClosed") and c.get("followUpUlang") not in ("Y", "N"):
         iss.append("Closed tanpa Follow-up Y/N")

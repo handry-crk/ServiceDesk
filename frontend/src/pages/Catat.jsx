@@ -123,8 +123,10 @@ export default function Catat() {
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “mentah”, “kurang”, “salah”, “rambut”, “lama”.">
           {frozen && <FrozenSubChips masters={masters} value={subJenis} onChange={setSubJenis} />}
           <Combo items={subs} value={subJenis} onChange={setSubJenis} placeholder="Ketik masalahnya…" renderBadge={levelItemBadge} />
+          {subJenis !== 'No Complaint' && <button type="button" className="text-xs text-brick underline mt-1" onClick={() => setSubJenis('No Complaint')}>Tidak ada keluhan (pujian, pertanyaan, rating bagus)? Pilih No Complaint</button>}
         </Field>
-        {sj && (
+        {sj && subJenis === 'No Complaint' && <div className="rounded-xl p-3 text-sm bg-cream">No Complaint: tercatat sebagai kontak, <b>tidak dihitung sebagai komplain</b>. Tanpa level, SLA penyelesaian, dan kompensasi.</div>}
+        {sj && subJenis !== 'No Complaint' && (
           <div className={`rounded-xl p-3 text-sm ${level === 'Critical' ? 'bg-brick text-white' : 'bg-cream'}`}>
             {level === 'Critical' && <div className="font-bold mb-1">Critical — balas &lt; 30 menit dan eskalasi ke Manager / Direksi</div>}
             <div className="flex flex-wrap gap-x-4 gap-y-1">

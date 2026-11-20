@@ -89,7 +89,7 @@ def normalize_courier(text):
 
 REVIEW_PLATFORMS = ["GoFood", "GrabFood", "ShopeeFood", "TikTok Go"]
 
-TIPE = ["Komplain", "Inquiry", "Advice and Suggestion"]
+TIPE = ["Komplain", "Inquiry", "Advice and Suggestion", "No Complaint"]
 
 PIC_DEPT = [
     "Ops / Outlet", "Kitchen / QC", "Gudang / Packing Frozen", "Logistics / Delivery",
@@ -174,7 +174,13 @@ _SJ = [
     ("Lainnya: Rasa / Porsi", "Di Luar Standard", "Belum Diatur",
      "Keluhan rasa/porsi/harga yang belum ada di CRM.STD.001 (dipakai untuk Review Online)",
      "rasa hambar bumbu sedikit porsi kecil mahal", "Ops / Outlet", "Ops / Outlet", ["Bumbu", "Porsi"]),
+    ("No Complaint", "Bukan Komplain", "Belum Diatur",
+     "Kontak / review tanpa keluhan: pujian, pertanyaan, rating bagus, salah kirim pesan",
+     "tidak ada komplain bukan komplain no complaint pujian terima kasih tanya info mantap enak bagus puas", "CRM / CS", "CRM / CS",
+     ["Pujian", "Pertanyaan / info", "Salah kirim pesan"]),
 ]
+
+NO_COMPLAINT = "No Complaint"
 
 # Teks lama (versi awal) — dipakai migrasi: hanya diganti bila belum diubah CS Lead
 SUB_JENIS_OLD_TEXT = {'Kontaminasi': ('Kontaminasi bahan haram/najis; benda asing (rambut, kertas, kawat, pest)', 'rambut benda asing plastik kawat kertas kecoa serangga halal najis'), 'Payment Issue': ('Uang kembalian tidak sesuai/tidak diberi, double payment, payment cashless tidak masuk', 'kembalian bayar dua kali double payment qris transfer'), 'Personal Hygiene': ('Mitra tidak memakai apron, topi, sepatu tertutup, celana panjang, masker, sarung tangan; aksesoris berlebihan', 'apron topi masker sarung tangan merokok'), 'Potential Fraud': ('Menjual produk selain Cimol Bojot AA, menjual produk mentah, menjual supply ke pedagang lain, membatasi porsi padahal tersedia', 'porsi kecil tidak ada tidak dikasih bill struk jual lain'), 'Keracunan': ('Dugaan keracunan pangan (4.3 d)', 'keracunan sakit perut muntah diare mual')}

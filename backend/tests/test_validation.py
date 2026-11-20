@@ -823,3 +823,25 @@ def test_daily_data(ctx):
     assert dash["period"]["totalTrx"] == 2000 and dash["volume"]["per1000"] == 1.0
     c.put("/api/daily", json={"tanggal": "2026-04-07"}, headers=A)
     assert c.get("/api/daily", params={"from": "2026-04-07", "to": "2026-04-07"}, headers=A).json()["rows"][0]["transaksi"] is None
+
+
+def test_no_complaint(ctx):
+    c, H, o = ctx
+    m = c.get("/api/masters", headers=H).json()
+    assert any(s["name"] == "No Complaint" for s in m["subJenis"]) and "No Complaint" in m["tipe"]
+    day = wib_iso(2026, 3, 3, 10, 0)
+    a = mk(c, H, o, subJenis="No Complaint", ringkasan="customer cuma tanya jam buka", waktuMasuk=day).json()
+    assert a["tipe"] == "No Complaint" and a["level"] is None and a["dataOk"] is True
+    mk(c, H, o, subJenis="Hospitality", ringkasan="komplain asli", waktuMasuk=wib_iso(2026, 3, 3, 11, 0))
+    d = c.get("/api/dashboard", params={"from": "2026-03-03", "to": "2026-03-03"}, headers=H).json()
+    assert d["volume"]["contact"] == 2 and d["volume"]["komplain"] == 1 and all(x["name"] != "No Complaint" for x in d["subJenis"])
+    r = c.post("/api/cases/rekap", json={"channel": "Review Online", "reviewPlatform": "GoFood", "rating": 5, "outletId": o["Jagakarsa"],
+               "subJenis": "No Complaint", "ringkasan": "enak banget", "waktuMasuk": wib_iso(2026, 3, 4, 10, 0),
+               "waktuFirstResponse": wib_iso(2026, 3, 4, 10, 5), "waktuResolved": wib_iso(2026, 3, 4, 10, 5), "force": True}, headers=H).json()
+    assert r["status"] == "Resolved" and r["kompensasiOutsideStandard"] is False and not r.get("voucherCode") and r["dataOk"] is True
+    # diubah jadi komplain sungguhan → kembali dihitung
+    r = c.patch(f"/api/cases/{a['caseId']}", json={"subJenis": "Hospitality"}, headers=H).json()
+    assert r["tipe"] == "Komplain" and r["level"] == "Minor"
+    t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\tStatus\n05/03/2026\t10.00\t10.02\tWA\tJagakarsa\tno complaint\tpujian\tSelesai"
+    p = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()
+    assert p["rows"][0]["ok"], p["rows"][0]

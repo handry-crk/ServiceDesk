@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, useApp, toLocalInput, fromLocalInput, compressImage, fmtMin, WRITERS, LEAD } from '../lib.jsx'
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge } from '../ui.jsx'
-import { Combo, levelItemBadge, subJenisItems, FrozenSubChips, OrderTimeInput } from '../components.jsx'
+import { Combo, levelItemBadge, subJenisItems, FrozenSubChips, OrderTimeInput, SalesChannelPick, deriveSalesChannel, PriorityBadge } from '../components.jsx'
 import { ModeTabs } from './Rekap.jsx'
 
 const FROZEN_KEYS = ['produkFrozen', 'produk', 'ekspedisi', 'noResi', 'kodeProduksi', 'qtyPesan', 'qtyDiterima']
@@ -19,7 +19,7 @@ export default function Catat() {
   const [lagReason, setLagReason] = useState('')
   const [order, setOrder] = useState('')
   const [more, setMore] = useState(false)
-  const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', reviewPlatform: '', rating: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
+  const [extra, setExtra] = useState({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', salesChannel: '', reviewPlatform: '', rating: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
   const [photos, setPhotos] = useState([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -45,7 +45,7 @@ export default function Catat() {
   const frozenStore = outlet?.type === 'online_frozen'
   const frozen = frozenStore || !!extra.produkFrozen
   const subs = subJenisItems(masters, frozen)
-  const cc = !level ? '-' : level === 'Minor' ? (frozen && subJenis === 'Kesalahan Kemasan' ? 'Factory' : 'Operasional') : level === 'Major' ? (frozen ? 'Team Frozen' : 'Operasional') : level === 'Critical' ? ((['Kontaminasi', 'Keracunan', 'Undercooked'].includes(subJenis) || (frozen && subJenis === 'Penurunan Mutu (tidak dapat dikonsumsi)')) ? 'Factory/Operasional (cek root cause)' : 'Operasional') : 'Belum Diatur'
+  const cc = !level ? '-' : level === 'Minor' ? (frozen && ['Kesalahan Kemasan', 'Kemasan Bocor (Frozen)', 'Packaging Rusak (Frozen)'].includes(subJenis) ? 'Factory' : 'Operasional') : level === 'Major' ? (frozen ? 'Team Frozen' : 'Operasional') : level === 'Critical' ? ((['Kontaminasi', 'Keracunan', 'Undercooked', 'Benda Asing (Frozen)', 'Produk Asam / Masam (Frozen)', 'Berjamur (Frozen)', 'Expired (Frozen)'].includes(subJenis) || (frozen && subJenis === 'Penurunan Mutu (tidak dapat dikonsumsi)')) ? 'Factory/Operasional (cek root cause)' : 'Operasional') : 'Belum Diatur'
   const lagMax = masters?.settings?.masukLagReasonMin ?? 30
   const lagMin = waktu ? Math.round((Date.now() - new Date(fromLocalInput(waktu)).getTime()) / 60000) : 0
   const needLag = lagMin > lagMax && !can(...LEAD)
@@ -90,7 +90,7 @@ export default function Catat() {
         label: 'Sudah dibalas', fn: async () => { await api(`/cases/${c.caseId}/respond`, { method: 'POST' }); notify(`${c.caseId} ditandai sudah dibalas`) },
       })
       setOutletId(''); setSubJenis(''); setRingkasan(''); setWaktu(null); setLagReason(''); setOrder(''); setPhotos([]); setDup(null)
-      setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', reviewPlatform: '', rating: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
+      setExtra({ brand: '', tipe: 'Komplain', orderNo: '', customerName: '', customerPhone: '', salesChannel: '', reviewPlatform: '', rating: '', produkFrozen: false, produk: '', ekspedisi: '', noResi: '', kodeProduksi: '', qtyPesan: '', qtyDiterima: '' })
       if (c.level === 'Critical') nav('/case/' + c.caseId)
     } catch (e) {
       if (e.status === 409) setDup(e.detail)
@@ -120,18 +120,21 @@ export default function Catat() {
         </div>}
         <Field label="Outlet" required><Combo items={outlets} value={outletId} onChange={setOutletId} placeholder="Ketik nama outlet…" recent={recentOutlets} /></Field>
         {outletId && !frozenStore && <label className="flex items-start gap-2 text-sm rounded-xl border border-line p-3 bg-white"><input type="checkbox" className="w-5 h-5 mt-0.5" checked={!!extra.produkFrozen} onChange={(e) => setExtra({ ...extra, produkFrozen: e.target.checked })} /><span><b>Komplain produk Cimol Frozen</b> (kemasan beku) yang dibeli di outlet / agen / channel ini<span className="block text-xs text-mute">Centang agar ditangani CS Online / Marketplace dan masuk dashboard & aturan frozen (PIC, cost center, kode produksi).</span></span></label>}
+        {outletId && <Field label="Sales channel (tempat customer membeli)" hint={extra.salesChannel ? 'Diubah manual.' : 'Terisi otomatis dari outlet / platform. Ketuk bila customer membeli lewat channel lain.'}>
+          <SalesChannelPick masters={masters} auto={deriveSalesChannel(outlet, channel, extra.reviewPlatform)} value={extra.salesChannel} onChange={(v) => setExtra({ ...extra, salesChannel: v })} /></Field>}
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “mentah”, “kurang”, “salah”, “rambut”, “lama”.">
           {frozen && <FrozenSubChips masters={masters} value={subJenis} onChange={setSubJenis} />}
           <Combo items={subs} value={subJenis} onChange={setSubJenis} placeholder="Ketik masalahnya…" renderBadge={levelItemBadge} />
           {subJenis !== 'No Complaint' && <button type="button" className="text-xs text-brick underline mt-1" onClick={() => setSubJenis('No Complaint')}>Tidak ada keluhan (pujian, pertanyaan, rating bagus)? Pilih No Complaint</button>}
         </Field>
         {sj && subJenis === 'No Complaint' && <div className="rounded-xl p-3 text-sm bg-cream">No Complaint: tercatat sebagai kontak, <b>tidak dihitung sebagai komplain</b>. Tanpa level, SLA penyelesaian, dan kompensasi.</div>}
+        {sj && subJenis !== 'No Complaint' && masters?.dataWajib?.[sj.jenis] && <div className="text-xs text-mute -mt-3">Data wajib ({sj.jenis}): {masters.dataWajib[sj.jenis]}</div>}
         {sj && subJenis !== 'No Complaint' && (
           <div className={`rounded-xl p-3 text-sm ${level === 'Critical' ? 'bg-brick text-white' : 'bg-cream'}`}>
             {level === 'Critical' && <div className="font-bold mb-1">Critical — balas &lt; 30 menit dan eskalasi ke Manager / Direksi</div>}
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <span>Level <b>{level || 'Belum Diatur'}</b></span><span>SLA <b>{sla}</b></span><span>PJ <b>{pj}</b></span>
-              <span>Cost center <b>{cc}</b></span><span>Target balas <b>{tfrt} mnt</b></span>
+              {sj.priority && <span>Prioritas <b>{sj.priority}</b></span>}<span>Cost center <b>{cc}</b></span><span>Target balas <b>{tfrt} mnt</b></span>
               {outlet && <span>Desk <b>{frozen || ch?.desk === 'Online' ? 'CS Online / Marketplace' : 'CS Offline'}</b></span>}
             </div>
           </div>

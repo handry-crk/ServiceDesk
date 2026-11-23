@@ -94,7 +94,7 @@ export function Combo({ items, value, onChange, placeholder, recent = [], render
   )
 }
 
-export const levelItemBadge = (i) => i.level ? <LevelBadge level={i.level} /> : null
+export const levelItemBadge = (i) => <>{i.level ? <LevelBadge level={i.level} /> : null}{i.priority ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-cream text-mute font-semibold">{i.priority}</span> : null}</>
 
 export function PhotoPick({ value, onChange, label = 'Upload screenshot' }) {
   const { notify } = useApp()
@@ -159,24 +159,50 @@ export function KodeLookup({ onDone }) {
   )
 }
 
-// Daftar sub jenis untuk Combo; outlet frozen → masalah frozen di urutan atas dengan contoh khas frozen
+// Daftar sub jenis untuk Combo; outlet frozen → kategori frozen di urutan atas
 export function subJenisItems(masters, frozen) {
   const all = (masters?.subJenis || []).filter((s) => s.active !== false && s.name !== 'Lainnya: Rasa / Porsi')
   const list = frozen ? [...all].sort((a, b) => (a.frozen ? a.frozenOrder ?? 0 : 99) - (b.frozen ? b.frozenOrder ?? 0 : 99)) : all
-  return list.map((s) => ({ value: s.name, label: s.name, sub: frozen && s.frozenContoh ? s.frozenContoh : s.contoh, keywords: s.keywords, level: s.level }))
+  return list.map((s) => ({ value: s.name, label: s.name, sub: `${s.jenis} · ${s.contoh || ''}`, keywords: (s.keywords || '') + ' ' + (s.jenis || ''), level: s.level, priority: s.priority }))
 }
 
+const PRIO_CLS = { Critical: 'bg-brick text-white', 'High/Critical': 'bg-brick text-white', High: 'bg-[#FBE3C8] text-[#8A4B00]', Medium: 'bg-[#E9E5DF] text-mute' }
+export const PriorityBadge = ({ p }) => p ? <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap ${PRIO_CLS[p] || 'bg-cream'}`}>Prioritas {p}</span> : null
+
 export function FrozenSubChips({ masters, value, onChange }) {
-  const list = (masters?.subJenis || []).filter((s) => s.frozen && s.active !== false).sort((a, b) => (a.frozenOrder ?? 0) - (b.frozenOrder ?? 0)).slice(0, 8)
+  const list = (masters?.subJenis || []).filter((s) => s.frozen && s.active !== false).sort((a, b) => (a.frozenOrder ?? 0) - (b.frozenOrder ?? 0))
   if (!list.length) return null
+  const groups = [...new Set(list.map((s) => s.jenis))]
   return (
-    <div className="mb-2">
-      <div className="text-xs text-mute mb-1">Masalah frozen yang sering:</div>
-      <div className="grid sm:grid-cols-2 gap-1.5">{list.map((s) => (
-        <button type="button" key={s.name} onClick={() => onChange(s.name)} className={`text-left rounded-xl border px-3 py-2 ${value === s.name ? 'border-brick bg-brick-soft' : 'border-line bg-white'}`}>
-          <div className="text-sm font-semibold flex items-center gap-2">{s.name}<LevelBadge level={s.level} /></div>
-          <div className="text-xs text-mute">{s.frozenContoh}</div>
-        </button>))}</div>
+    <div className="mb-2 rounded-xl border border-line bg-white p-3 space-y-2">
+      {groups.map((g) => (
+        <div key={g}><div className="text-xs text-mute font-semibold mb-1">{g}</div>
+          <div className="flex flex-wrap gap-1.5">{list.filter((s) => s.jenis === g).map((s) => (
+            <button type="button" key={s.name} title={s.contoh} onClick={() => onChange(s.name)}
+              className={`px-2.5 min-h-[34px] rounded-lg border text-[13px] font-semibold ${value === s.name ? 'border-brick bg-brick text-white' : 'border-line bg-white hover:bg-cream'}`}>{s.name.replace(' (Frozen)', '')}</button>))}</div>
+        </div>))}
+    </div>
+  )
+}
+
+// Sales channel = tempat customer membeli. Terisi otomatis; bisa diganti bila berbeda.
+export function deriveSalesChannel(outlet, channel, reviewPlatform) {
+  if (channel === 'Review Online' && reviewPlatform) return reviewPlatform
+  if (outlet?.type === 'online_frozen') return /shopee/i.test(outlet.name) ? 'Shopee' : 'TikTok Tokopedia'
+  return 'Outlet / Kios'
+}
+export function SalesChannelPick({ masters, auto, value, onChange }) {
+  const list = masters?.salesChannels || []
+  const cur = value || auto
+  const groups = [...new Set(list.map((x) => x.group))]
+  return (
+    <div className="space-y-1.5">
+      {groups.map((g) => (
+        <div key={g} className="flex flex-wrap items-center gap-1.5"><span className="text-xs text-mute w-full sm:w-36">{g}</span>
+          {list.filter((x) => x.group === g).map((x) => (
+            <button type="button" key={x.name} onClick={() => onChange(x.name === auto ? '' : x.name)}
+              className={`px-2.5 min-h-[34px] rounded-lg border text-[13px] font-semibold ${cur === x.name ? 'border-brick bg-brick text-white' : 'border-line bg-white hover:bg-cream'}`}>{x.name}</button>))}
+        </div>))}
     </div>
   )
 }

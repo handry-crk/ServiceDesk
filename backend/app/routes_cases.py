@@ -84,6 +84,7 @@ class CaseIn(BaseModel):
     waktuOrder: Optional[str] = None
     reviewPlatform: Optional[str] = None
     rating: Optional[int] = None
+    salesChannel: Optional[str] = None
     force: bool = False
 
 
@@ -169,6 +170,10 @@ async def create_case(body: CaseIn, u=Depends(require(*WRITERS))):
     if wo:
         c["waktuOrder"] = wo
     c.update(review)
+    if body.salesChannel:
+        if body.salesChannel not in S.SALES_GROUP:
+            raise HTTPException(400, "Sales channel tidak dikenal.")
+        c["salesChannelManual"] = body.salesChannel
     c["picDept"] = sj["picFrozen"] if (outlet["type"] == "online_frozen" or body.produkFrozen) else sj["picOutlet"]
     await save_case(c, ctx)
     await add_event(case_id, "created", u, {"channel": body.channel})
@@ -249,6 +254,7 @@ class PatchIn(BaseModel):
     waktuOrder: Optional[str] = None
     reviewPlatform: Optional[str] = None
     rating: Optional[int] = None
+    salesChannel: Optional[str] = None
 
 
 @router.patch("/cases/{case_id}")
@@ -273,6 +279,11 @@ async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
         data["deskOverride"] = data["deskOverride"] or None
     if data.get("reviewPlatform") and data["reviewPlatform"] not in S.REVIEW_PLATFORMS:
         raise HTTPException(400, "Platform Online tidak dikenal.")
+    if "salesChannel" in data:
+        sc = data.pop("salesChannel")
+        if sc and sc not in S.SALES_GROUP:
+            raise HTTPException(400, "Sales channel tidak dikenal.")
+        data["salesChannelManual"] = sc or None
     if "waktuOrder" in data:
         data["waktuOrder"] = check_order_time(data["waktuOrder"], c.get("waktuMasuk")) if data["waktuOrder"] else None
     before = {k: c.get(k) for k in data}
@@ -710,6 +721,34 @@ async def total_trx(frm: date, to: date):
     return round(total) if have else None
 
 
+async def sales_channel_table(komplain, f: date, t: date):
+    """Komplain & transaksi per sales channel + subtotal kelompok (Offline / Online Aggregator / Marketplace)."""
+    trx = {n: 0 for n, _ in S.SALES_CHANNELS}
+    days = 0
+    async for x in get_db().daily.find({"tanggal": {"$gte": f.isoformat(), "$lte": t.isoformat()}}):
+        if x.get("trx"):
+            days += 1
+            for n, v in x["trx"].items():
+                if n in trx and v:
+                    trx[n] += v
+    total = len(komplain) or 1
+
+    def row(name, cs, tr, kind):
+        return {"name": name, "kind": kind, "komplain": len(cs), "pct": round(len(cs) / total, 4),
+                "critical": sum(1 for c in cs if c.get("level") == "Critical"),
+                "open": sum(1 for c in cs if c.get("status") not in ("Resolved", "Closed")),
+                "transaksi": tr or None, "per1000": round(len(cs) / tr * 1000, 2) if tr else None}
+    rows = []
+    for g in S.SALES_GROUPS:
+        names = [n for n, gg in S.SALES_CHANNELS if gg == g]
+        gcs = [c for c in komplain if c.get("salesGroup", "Offline") == g]
+        rows.append(row(g, gcs, sum(trx[n] for n in names), "group"))
+        if len(names) > 1:
+            rows += [row(n, [c for c in gcs if c.get("salesChannel") == n], trx[n], "channel") for n in names]
+    rows.append(row("Total", komplain, sum(trx.values()), "total"))
+    return {"rows": rows, "trxDays": days, "days": (t - f).days + 1}
+
+
 async def _members(cases, targets):
     """FRT per member + CS aktif yang belum membalas di periode ini (tetap tampil dengan 0)."""
     users = [x async for x in get_db().users.find({"active": {"$ne": False}}, {"name": 1, "desk": 1, "role": 1})]
@@ -772,6 +811,7 @@ async def build_dashboard(frm: str, to: str, u=None, brand=None, area=None, line
         "outlets": outlets, "kompensasi": komp, "hours": hours, "weeks": weeks,
         "members": await _members(cases, targets),
         "desks": by_desk(cases, targets), "levelDetail": level_breakdown(komplain, f, t),
+        "salesChannels": await sales_channel_table(komplain, f, t),
         "insights": insights(cases, m, vol, hours, subj, channels),
     }
 

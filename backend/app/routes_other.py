@@ -60,7 +60,8 @@ async def masters(u=Depends(current_user)):
         "targets": ctx["targets"], "settings": ctx["settings"], "penanggungJawab": ctx["pj"],
         "resolutionTarget": ctx["resTarget"], "criticalFrt": ctx["criticalFrt"],
         "outlets": sorted([clean(x) for x in ctx["outlets"].values()], key=lambda x: x["name"]),
-        "picDept": S.PIC_DEPT, "tipe": S.TIPE, "reviewPlatforms": S.REVIEW_PLATFORMS, "desks": [{"key": k, "label": S.DESK_LABEL[k]} for k in S.DESKS], "couriers": S.COURIERS, "frozenProducts": S.FROZEN_PRODUCTS, "needsBatch": sorted(S.NEEDS_BATCH), "standardDoc": S.STANDARD_DOC, "areas": S.AREAS, "voucherJenis": S.VOUCHER_JENIS,
+        "picDept": S.PIC_DEPT, "tipe": S.TIPE, "reviewPlatforms": S.REVIEW_PLATFORMS, "salesChannels": [{"name": n, "group": g} for n, g in S.SALES_CHANNELS], "dataWajib": S.DATA_WAJIB,
+        "desks": [{"key": k, "label": S.DESK_LABEL[k]} for k in S.DESKS], "couriers": S.COURIERS, "frozenProducts": S.FROZEN_PRODUCTS, "needsBatch": sorted(S.NEEDS_BATCH), "standardDoc": S.STANDARD_DOC, "areas": S.AREAS, "voucherJenis": S.VOUCHER_JENIS,
         "brands": sorted({o.get("brand") or "Cimol Bojot AA" for o in ctx["outlets"].values()}),
         "agents": sorted({u2["name"] async for u2 in db.users.find({"active": True})}),
     }
@@ -607,7 +608,7 @@ EXPORT_COLS = [
     ("PIC Dept", "picDept"), ("Bentuk Complimentary", "kompensasiLabel"), ("Nilai Complimentary (Rp)", "nilaiKompensasi"),
     ("Penanggung Jawab", "penanggungJawab"), ("Status", "status"), ("Customer Follow-up Ulang (Y/N)", "followUpUlang"),
     ("Reopen (Y/N)", "reopenCount"), ("CSAT (1–5)", "csat"), ("CS Agent", "csAgent"), ("Catatan", "notes"),
-    ("Platform Online", "reviewPlatform"), ("Rating", "rating"), ("Jam Order Customer", "waktuOrder"), ("Order → Komplain (menit)", "orderToComplaintMin"), ("FRT jam kerja (menit)", "frtMin"), ("Waktu tunggu kalender (menit)", "waitMin"), ("Target FRT (menit)", "targetFrtMin"), ("SLA Response OK", "slaResponseOk"),
+    ("Sales Channel", "salesChannel"), ("Kelompok Channel", "salesGroup"), ("Priority", "priority"), ("Platform Online", "reviewPlatform"), ("Rating", "rating"), ("Jam Order Customer", "waktuOrder"), ("Order → Komplain (menit)", "orderToComplaintMin"), ("FRT jam kerja (menit)", "frtMin"), ("Waktu tunggu kalender (menit)", "waitMin"), ("Target FRT (menit)", "targetFrtMin"), ("SLA Response OK", "slaResponseOk"),
     ("Resolution Time tanpa hari libur (menit)", "resolutionMin"), ("Resolution Time kalender (menit)", "resolutionCalMin"), ("Target Resolution (menit)", "targetResolutionMin"),
     ("Resolution SLA OK", "resolutionSlaOk"), ("Same Day", "sameDay"), ("FCR", "fcr"), ("Puas (CSAT ≥4)", "puas"),
     ("Jenis Komplain", "jenis"), ("Level Standard", "levelStandard"), ("Cost Center", "costCenter"),

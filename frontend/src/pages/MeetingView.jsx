@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, useApp, useAsync, fmtD, fmtPct, fmtNum, fmtRp, todayWIB, WRITERS, LEAD, MEETING_EDITORS } from '../lib.jsx'
 import { Btn, ErrorBox, Skeleton, LevelBadge, inputCls } from '../ui.jsx'
-import { Headline, MetricsTable, LevelTable, HBar, HourChart, Weekly, MemberTable, LevelBreakdown } from './Dashboard.jsx'
+import { Headline, MetricsTable, LevelTable, HBar, HourChart, Weekly, MemberTable, LevelBreakdown, SalesChannelTable } from './Dashboard.jsx'
 import { KompSummary, GroupTable } from './Kompensasi.jsx'
 import Compare from './Compare.jsx'
 import { IntegrityBody } from './Integritas.jsx'
@@ -121,6 +121,7 @@ export default function MeetingView() {
             <div className="bg-white rounded-2xl border border-line p-4"><div className="font-bold mb-2">Jenis komplain</div><HBar rows={d.jenis} /></div>
           </div>
           <div className="mt-4"><LevelBreakdown d={d} meeting /></div>
+          <div className="mt-4"><SalesChannelTable d={d} meeting /></div>
           {d.sourceGroups?.length > 0 && (
             <div className="bg-white rounded-2xl border border-line p-4 mt-4">
               <div className="font-bold mb-3">Sumber komplain</div>

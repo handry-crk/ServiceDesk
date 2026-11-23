@@ -312,3 +312,84 @@ FROZEN_SUBS = [
     ("Hospitality", "Balasan admin / CS toko tidak ramah atau lambat", "admin slow respon tidak dibalas frozen"),
     ("Payment Issue", "Refund belum masuk, dana tertahan", "refund belum masuk dana pengembalian frozen"),
 ]
+
+
+# ------------------------------------------------------------------ Sales channel (tempat customer membeli)
+SALES_CHANNELS = [
+    ("Outlet / Kios", "Offline"),
+    ("GrabFood", "Online Aggregator"), ("GoFood", "Online Aggregator"), ("TikTok Go", "Online Aggregator"),
+    ("ShopeeFood", "Online Aggregator"),
+    ("Shopee", "Marketplace"), ("TikTok Tokopedia", "Marketplace"),
+]
+SALES_GROUP = dict(SALES_CHANNELS)
+SALES_GROUPS = ["Offline", "Online Aggregator", "Marketplace"]
+
+
+def derive_sales_channel(c, outlet):
+    """Sales channel otomatis dari platform review / channel lama / nama toko frozen; selain itu Outlet / Kios."""
+    if c.get("reviewPlatform") in SALES_GROUP:
+        return c["reviewPlatform"]
+    if c.get("channel") in SALES_GROUP:
+        return c["channel"]
+    if (c.get("outletType") or (outlet or {}).get("type")) == "online_frozen":
+        n = ((outlet or {}).get("name") or c.get("outletName") or "").lower()
+        return "Shopee" if "shopee" in n else "TikTok Tokopedia"
+    return "Outlet / Kios"
+
+
+# ------------------------------------------------------------------ Kategori frozen & non-outlet (Rekap Komplain Frozen, 23 Nov 2026)
+# Level = usulan pemetaan ke CRM.STD.001 (perlu konfirmasi QMS; bisa diubah di Pengaturan).
+# (nama, jenis, level, priority, contoh, kata kunci, root cause chips)
+_NEW_SJ = [
+    ("Rasa Berubah (Frozen)", "Product Quality Frozen", "Minor", "High", "Rasa cimol / bumbu berubah dari biasanya", "rasa berubah aneh beda hambar pahit", ["Bahan baku", "Proses produksi", "Penyimpanan"]),
+    ("Cimol Keras (Frozen)", "Product Quality Frozen", "Major", "High", "Cimol keras / alot setelah digoreng sesuai petunjuk", "keras alot bantat", ["Proses produksi", "Cara masak customer", "Penyimpanan"]),
+    ("Isian Menggumpal (Frozen)", "Product Quality Frozen", "Minor", "High", "Isian keju / ayam menggumpal, kosong, atau tidak merata", "isian menggumpal keju ayam kosong tidak lumer mozzarella", ["Proses produksi", "Bahan baku"]),
+    ("Tidak Ada Bumbu / Topping (Frozen)", "Product Quality Frozen", "Major", "High", "Bumbu atau topping tidak ada di dalam kemasan", "tidak ada bumbu topping bumbu kurang sachet", ["Ketelitian packing", "Sealer bumbu"]),
+    ("Benda Asing (Frozen)", "Product Quality Frozen", "Critical", "High", "Ada benda asing di dalam produk / kemasan", "benda asing rambut plastik kerikil serangga", ["Proses produksi", "Packing"]),
+    ("Pesanan Kurang (Frozen)", "Frozen Product", "Major", "Critical", "Jumlah pcs / pack yang diterima kurang dari pesanan", "kurang pcs pack jumlah kekurangan produk kurang tidak lengkap", ["Ketelitian packing", "Stok"]),
+    ("Salah Varian (Frozen)", "Frozen Product", "Major", "Critical", "Varian rasa / isi yang dikirim berbeda dari pesanan", "salah varian salah rasa tertukar beda isi salah kirim", ["Ketelitian packing", "Label"]),
+    ("Produk Asam / Masam (Frozen)", "Frozen Product", "Critical", "Critical", "Produk asam / masam / berbau, tidak dapat dikonsumsi", "asam masam bau basi berlendir", ["Pengiriman lama", "Suhu penyimpanan", "Produk Masam QC"]),
+    ("Berjamur (Frozen)", "Frozen Product", "Critical", "Critical", "Produk berjamur", "jamur berjamur bintik", ["Pengiriman lama", "Suhu penyimpanan", "Kemasan bocor"]),
+    ("Tekstur Berubah (Frozen)", "Frozen Product", "Minor", "Critical", "Tekstur lembek / mencair / berubah tetapi masih bisa dimakan", "tekstur lembek mencair cair benyek tidak beku", ["Pengiriman lama", "Suhu penyimpanan"]),
+    ("Expired (Frozen)", "Frozen Product", "Critical", "Critical", "Produk diterima sudah lewat / mendekati tanggal kadaluarsa", "expired kadaluarsa kedaluwarsa exp", ["Rotasi stok (FIFO)", "Label"]),
+    ("Kemasan Bocor (Frozen)", "Frozen Product", "Minor", "Critical", "Kemasan bocor, vakum lepas, sealer pecah", "bocor vakum lepas sealer pecah berhamburan", ["Sealer", "Proses packing"]),
+    ("Packaging Rusak (Frozen)", "Frozen Product", "Minor", "Critical", "Kemasan sobek, penyok, terkelupas", "kemasan rusak sobek penyok terkelupas robek packaging", ["Proses packing", "Pengiriman"]),
+    ("Pengiriman Lama / Tidak Ada Update", "Marketplace Order", "Belum Diatur", "Medium", "Paket lama sampai atau status ekspedisi tidak bergerak", "pengiriman lama telat tidak ada update stuck belum sampai ekspedisi", ["Tidak ada update ekspedisi", "Overload ekspedisi", "Alamat"]),
+    ("Produk Rusak saat Diterima", "Marketplace Order", "Belum Diatur", "Medium", "Paket rusak / bolong / digigit tikus saat diterima", "paket rusak bolong digigit tikus penyok hancur pecah", ["Pihak Ekspedisi", "Packing kurang aman"]),
+    ("Di-repack Ekspedisi", "Marketplace Order", "Belum Diatur", "Medium", "Paket dibuka / dikemas ulang oleh ekspedisi", "repack dikemas ulang dibuka ekspedisi", ["Pihak Ekspedisi"]),
+    ("Paket Hilang / Tidak Diterima", "Marketplace Order", "Belum Diatur", "Medium", "Paket hilang atau berstatus terkirim tetapi tidak diterima", "paket hilang tidak diterima tidak sampai nyasar", ["Pihak Ekspedisi", "Alamat"]),
+    ("Diretur Customer", "Marketplace Order", "Belum Diatur", "Medium", "Customer mengajukan retur / pengembalian", "retur dikembalikan pengembalian return", ["di retur customer"]),
+    ("Double Resi", "Marketplace Order", "Belum Diatur", "Medium", "Satu pesanan tercetak dua resi / terkirim dobel", "double resi dobel dua kali kirim", ["Sistem marketplace", "Admin"]),
+    ("Voucher Tidak Bisa Dipakai", "Membership / Promo", "Belum Diatur", "Medium", "Voucher / kode promo ditolak", "voucher tidak bisa dipakai kode promo gagal", ["Syarat promo", "Sistem"]),
+    ("Benefit Member Tidak Jelas", "Membership / Promo", "Belum Diatur", "Medium", "Benefit membership tidak jelas / tidak diterima", "member membership benefit poin tidak jelas", ["Komunikasi promo"]),
+    ("Promo Tidak Sesuai Komunikasi", "Membership / Promo", "Belum Diatur", "Medium", "Promo yang didapat berbeda dari yang diiklankan", "promo tidak sesuai iklan diskon beda", ["Komunikasi promo", "Syarat promo"]),
+    ("Pelayanan Lambat (Event)", "Event / Home Service", "Minor", "Medium", "Antrean / pelayanan lambat di event atau home service", "event lambat antre lama home service", ["Jumlah crew", "Persiapan"]),
+    ("Stok Habis (Event)", "Event / Home Service", "Belum Diatur", "Medium", "Stok habis di event / home service", "event stok habis kehabisan", ["Perencanaan stok"]),
+    ("Pembayaran Bermasalah (Event)", "Event / Home Service", "Major", "Medium", "Pembayaran event / home service bermasalah", "event pembayaran dp transfer invoice", ["Finance", "Admin"]),
+    ("Customer Kecewa (Event)", "Event / Home Service", "Belum Diatur", "Medium", "Customer kecewa terhadap pelaksanaan event / home service", "event kecewa tidak sesuai", ["Persiapan", "Komunikasi"]),
+    ("Komplain di DM", "Social Media Complaint", "Belum Diatur", "High", "Komplain lewat DM Instagram / TikTok", "dm inbox pesan instagram tiktok", ["-"]),
+    ("Komentar Publik", "Social Media Complaint", "Critical", "High/Critical", "Komplain di kolom komentar publik", "komentar publik comment", ["-"]),
+    ("Story Mention", "Social Media Complaint", "Critical", "High/Critical", "Komplain lewat story / mention akun brand", "story mention tag", ["-"]),
+    ("Viral Complaint", "Social Media Complaint", "Critical", "Critical", "Komplain viral / berpotensi viral", "viral fyp ramai", ["-"]),
+]
+_NEW_PIC = {"Product Quality Frozen": "Kitchen / QC", "Frozen Product": "Gudang / Packing Frozen", "Marketplace Order": "Logistics / Delivery",
+            "Membership / Promo": "Marketing", "Event / Home Service": "Marketing", "Social Media Complaint": "CRM / CS"}
+FROZEN_JENIS = ("Product Quality Frozen", "Frozen Product", "Marketplace Order")
+NEW_SUB_JENIS = [
+    {"name": n, "jenis": j, "level": l, "priority": pr, "contoh": c, "keywords": k + (" frozen" if j in FROZEN_JENIS else ""),
+     "picOutlet": _NEW_PIC[j], "picFrozen": _NEW_PIC[j], "rootCauses": [r for r in rc if r != "-"], "active": True,
+     **({"frozen": True, "frozenOrder": i, "frozenContoh": c} if j in FROZEN_JENIS else {})}
+    for i, (n, j, l, pr, c, k, rc) in enumerate(_NEW_SJ)
+]
+DATA_WAJIB = {
+    "Product Quality Frozen": "outlet / toko, SKU, foto / video, tanggal beli, kronologi",
+    "Frozen Product": "SKU, batch / expired date (kode produksi), foto / video, channel beli, tanggal diterima",
+    "Marketplace Order": "order ID, platform, SKU, foto paket, kronologi",
+    "Membership / Promo": "nomor member, voucher, screenshot, channel promo",
+    "Event / Home Service": "event, waktu, bukti pembayaran, kronologi",
+    "Social Media Complaint": "link / screenshot, channel, kronologi",
+}
+NEEDS_BATCH |= {"Rasa Berubah (Frozen)", "Cimol Keras (Frozen)", "Isian Menggumpal (Frozen)", "Tidak Ada Bumbu / Topping (Frozen)",
+                "Benda Asing (Frozen)", "Pesanan Kurang (Frozen)", "Salah Varian (Frozen)", "Produk Asam / Masam (Frozen)",
+                "Berjamur (Frozen)", "Tekstur Berubah (Frozen)", "Expired (Frozen)", "Kemasan Bocor (Frozen)", "Packaging Rusak (Frozen)"}
+SUB_JENIS += [dict(x, order=len(SUB_JENIS) + i) for i, x in enumerate(NEW_SUB_JENIS)]

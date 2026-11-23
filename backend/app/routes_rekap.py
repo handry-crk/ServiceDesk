@@ -140,6 +140,7 @@ class RekapIn(BaseModel):
     waktuOrder: Optional[str] = None
     reviewPlatform: Optional[str] = None
     rating: Optional[int] = None
+    salesChannel: Optional[str] = None
     force: bool = False
 
 
@@ -197,7 +198,7 @@ async def do_rekap(body: RekapIn, u, evidence_override=None):
                 waktuMasuk=body.waktuMasuk, tipe=body.tipe, orderNo=body.orderNo, customerName=body.customerName,
                 customerPhone=body.customerPhone, photos=(body.photos or [])[:3], produk=body.produk,
                 kodeProduksi=body.kodeProduksi, ekspedisi=body.ekspedisi, noResi=body.noResi, qtyPesan=body.qtyPesan,
-                qtyDiterima=body.qtyDiterima, produkFrozen=body.produkFrozen, waktuOrder=body.waktuOrder, reviewPlatform=body.reviewPlatform, rating=body.rating, source="rekap",
+                qtyDiterima=body.qtyDiterima, produkFrozen=body.produkFrozen, waktuOrder=body.waktuOrder, reviewPlatform=body.reviewPlatform, rating=body.rating, salesChannel=body.salesChannel, source="rekap",
                 waktuMasukReason="Bulk input" if evidence == "bulk" else "Rekap dari WhatsApp", force=body.force)
     created = await create_case(ci, u)
     cid = created["caseId"]

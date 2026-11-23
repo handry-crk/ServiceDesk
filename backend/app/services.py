@@ -68,11 +68,18 @@ async def seed_if_empty():
     if rv and not rv.get("deskOnlineSet"):
         await db.channels.update_one({"_id": rv["_id"]}, {"$set": {"desk": "Online", "deskOnlineSet": True}})
         await db.cases.update_many({"channel": "Review Online"}, {"$unset": {"desk": ""}})
-    if await db.cases.count_documents({"$or": [{"desk": {"$exists": False}}, {"frozen": {"$exists": False}},
+    if await db.cases.count_documents({"$or": [{"desk": {"$exists": False}}, {"frozen": {"$exists": False}}, {"salesChannel": {"$exists": False}},
                                                 {"frozen": True, "desk": "Offline", "deskOverride": None}]}):
         await recompute_all()
     # migrasi: channel Online Food Aggregator disembunyikan dari form (data lama tetap terbaca)
     await db.channels.update_many({"name": {"$in": S.HIDDEN_CHANNELS}, "hidden": {"$exists": False}}, {"$set": {"hidden": True}})
+    # migrasi: kategori frozen & non-outlet (23 Nov 2026) → ditambahkan bila belum ada; chip frozen lama dimatikan
+    base = await db.sub_jenis.count_documents({})
+    added = 0
+    for x in S.NEW_SUB_JENIS:
+        if not await db.sub_jenis.find_one({"name": x["name"]}):
+            await db.sub_jenis.insert_one(dict(x, order=base + added))
+            added += 1
     # migrasi: sub jenis "No Complaint" (kontak / review tanpa keluhan)
     if not await db.sub_jenis.find_one({"name": S.NO_COMPLAINT}):
         nc = next(dict(x) for x in S.SUB_JENIS if x["name"] == S.NO_COMPLAINT)
@@ -86,6 +93,8 @@ async def seed_if_empty():
             add = " ".join(w for w in kw.split() if w not in have.split())
             await db.sub_jenis.update_one({"_id": cur["_id"]}, {"$set": {
                 "frozen": True, "frozenOrder": i, "frozenContoh": contoh, "keywords": (have + " " + add).strip()}})
+    # daftar "Masalah frozen yang sering" sekarang memakai kategori frozen baru
+    await db.sub_jenis.update_many({"frozen": True, "jenis": {"$nin": list(S.FROZEN_JENIS)}}, {"$set": {"frozen": False}})
     for n, area in S.NEW_OUTLETS.items():
         if not await db.outlets.find_one({"name": n}):
             await db.outlets.insert_one({"id": new_id(), "name": n, "type": S.outlet_type(n), "area": area,

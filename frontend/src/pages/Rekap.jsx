@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, useApp, useAsync, toLocalInput, fromLocalInput, fmtDT, fmtMin, workMinutes, WRITERS } from '../lib.jsx'
 import { Btn, Card, Chip, Field, inputCls, ErrorBox, LevelBadge, StatusBadge, Sheet } from '../ui.jsx'
-import { Combo, levelItemBadge, PhotoPick, subJenisItems, FrozenSubChips, OrderTimeInput } from '../components.jsx'
+import { Combo, levelItemBadge, PhotoPick, subJenisItems, FrozenSubChips, OrderTimeInput, SalesChannelPick, deriveSalesChannel, PriorityBadge } from '../components.jsx'
 import { VoucherMsg } from './CaseDetail.jsx'
 
 const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } }
-const EMPTY = { reviewPlatform: '', rating: '', order: '', produkFrozen: false, outletId: '', subJenis: '', ringkasan: '', masuk: '', dibalas: '', selesai: '', status: 'selesai', rootCause: '', kompensasiKey: '', nilai: '', followUpUlang: 'N', orderNo: '', customerName: '', customerPhone: '', produk: '', kodeProduksi: '', ekspedisi: '' }
+const EMPTY = { salesChannel: '', reviewPlatform: '', rating: '', order: '', produkFrozen: false, outletId: '', subJenis: '', ringkasan: '', masuk: '', dibalas: '', selesai: '', status: 'selesai', rootCause: '', kompensasiKey: '', nilai: '', followUpUlang: 'N', orderNo: '', customerName: '', customerPhone: '', produk: '', kodeProduksi: '', ekspedisi: '' }
 
 export default function Rekap() {
   const { masters, loadMasters, notify, can } = useApp()
@@ -57,6 +57,7 @@ export default function Rekap() {
   useEffect(() => { clearTimeout(timer.current); timer.current = setTimeout(() => readChat(chat, null), 400); return () => clearTimeout(timer.current) }, [chat])
 
   const isReview = channel === 'Review Online'
+  const autoSales = deriveSalesChannel(outlet, channel, f.reviewPlatform)
   const fromChat = isReview || (parsed?.masuk && parsed?.dibalas && f.masuk === toLocalInput(parsed.masuk) && f.dibalas === toLocalInput(parsed.dibalas))
   const done = f.status !== 'proses'
   const noComplaint = f.subJenis === 'No Complaint'
@@ -78,7 +79,7 @@ export default function Rekap() {
     setBusy(true); setErr(null)
     try {
       const body = {
-        channel, outletId: f.outletId, subJenis: f.subJenis, ringkasan: f.ringkasan, waktuMasuk: fromLocalInput(f.masuk), waktuFirstResponse: f.dibalas ? fromLocalInput(f.dibalas) : null, reviewPlatform: isReview ? f.reviewPlatform : null, rating: isReview && f.rating ? Number(f.rating) : null,
+        channel, outletId: f.outletId, subJenis: f.subJenis, ringkasan: f.ringkasan, waktuMasuk: fromLocalInput(f.masuk), waktuFirstResponse: f.dibalas ? fromLocalInput(f.dibalas) : null, reviewPlatform: isReview ? f.reviewPlatform : null, salesChannel: f.salesChannel || null, rating: isReview && f.rating ? Number(f.rating) : null,
         waktuResolved: done ? fromLocalInput(f.selesai || toLocalInput()) : null, rootCause: done && !noComplaint ? f.rootCause : null, kompensasiKey: done && !noComplaint ? f.kompensasiKey : null,
         nilaiKompensasi: done && f.nilai !== '' ? Number(f.nilai) : null, closed: f.status === 'closed', followUpUlang: f.followUpUlang,
         chatText: chat || null, chatCustomer: cust, photo, orderNo: f.orderNo || null, customerName: f.customerName || null, customerPhone: f.customerPhone || null,
@@ -139,7 +140,10 @@ export default function Rekap() {
           {outlet?.pending && <div className="text-xs text-[#7A5410] mt-1">Outlet ini menunggu verifikasi CRM Supervisor. Case tetap tersimpan.</div>}
         </Field>
         {f.outletId && !frozenStore && <label className="flex items-start gap-2 text-sm rounded-xl border border-line p-3 bg-white"><input type="checkbox" className="w-5 h-5 mt-0.5" checked={f.produkFrozen} onChange={(e) => set('produkFrozen', e.target.checked)} /><span><b>Komplain produk Cimol Frozen</b> (kemasan beku) yang dibeli di outlet / agen / channel ini<span className="block text-xs text-mute">Centang agar ditangani CS Online / Marketplace dan masuk dashboard & aturan frozen (PIC, cost center, kode produksi).</span></span></label>}
+        {f.outletId && <Field label="Sales channel (tempat customer membeli)" hint={f.salesChannel ? 'Diubah manual.' : 'Terisi otomatis dari outlet / platform. Ketuk bila customer membeli lewat channel lain (mis. pesan via GrabFood tapi komplain di WhatsApp).'}>
+          <SalesChannelPick masters={masters} auto={autoSales} value={f.salesChannel} onChange={(v) => set('salesChannel', v)} /></Field>}
         <Field label="Sub Jenis Komplain" required hint="Bisa cari dengan kata sehari-hari: “kurang”, “pecah”, “bocor”, “telat”.">{frozen && <FrozenSubChips masters={masters} value={f.subJenis} onChange={(v) => set('subJenis', v)} />}<Combo items={subs} value={f.subJenis} onChange={(v) => set('subJenis', v)} placeholder={frozen ? 'Atau ketik masalahnya…' : 'Ketik masalahnya…'} renderBadge={levelItemBadge} />
+          {sj && !noComplaint && <div className="flex flex-wrap items-center gap-2 mt-2 text-xs"><span className="font-semibold">{sj.jenis}</span><LevelBadge level={sj.level} /><PriorityBadge p={sj.priority} />{masters?.dataWajib?.[sj.jenis] && <span className="text-mute w-full">Data wajib: {masters.dataWajib[sj.jenis]}</span>}</div>}
           {!noComplaint && <button type="button" className="text-xs text-brick underline mt-1" onClick={() => set('subJenis', 'No Complaint')}>Tidak ada keluhan (pujian, pertanyaan, rating bagus)? Pilih No Complaint</button>}</Field>
         <Field label="Ringkasan masalah" required hint="Terisi dari pesan customer; rapikan seperlunya."><textarea className={inputCls + ' min-h-[72px] py-2'} value={f.ringkasan} onChange={(e) => set('ringkasan', e.target.value)} /></Field>
         {ch?.orderRequired && <Field label={`No. Pesanan ${channel}`}><input className={inputCls} value={f.orderNo} onChange={(e) => set('orderNo', e.target.value.trim())} /></Field>}

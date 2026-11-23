@@ -40,6 +40,7 @@ COLS = [  # (kunci, judul di template, alias header)
     ("customerName", "Nama Customer", ["nama customer", "nama", "customer"]),
     ("customerPhone", "No HP", ["no hp", "no. hp", "hp", "whatsapp", "no wa", "no. wa"]),
     ("orderNo", "No Pesanan", ["no pesanan", "no. pesanan", "order", "order id"]),
+    ("sales", "Sales Channel", ["sales channel", "channel penjualan", "tempat beli", "channel beli"]),
     ("platform", "Platform Online", ["platform online", "platform", "platform review"]),
     ("rating", "Rating", ["rating", "bintang"]),
     ("order", "Jam Order", ["jam order", "waktu order", "jam pesan", "waktu pesan", "jam order customer"]),
@@ -54,6 +55,20 @@ CH_ALIAS = {"wa": "WhatsApp", "whatsap": "WhatsApp", "wasap": "WhatsApp", "ig": 
             "tiktok": "TikTok DM", "dmtiktok": "TikTok DM", "komentar": "Social Comment", "comment": "Social Comment",
             "marketplace": "Marketplace Chat", "shopee": "Marketplace Chat", "tokopedia": "Marketplace Chat",
             "tiktokshop": "Marketplace Chat", "gojek": "GoFood", "grab": "GrabFood", "tiktokgo": "TikTok Go", "shopeefood": "ShopeeFood", "livechat": "Live Chat"}
+
+
+def sales_of(text):
+    n = _norm(text)
+    for name in S.SALES_GROUP:
+        if _norm(name) == n:
+            return name
+    if n in ("outlet", "kios", "gerobak", "offline", "outletkios"):
+        return "Outlet / Kios"
+    for key, name in (("shopeefood", "ShopeeFood"), ("tiktokgo", "TikTok Go"), ("grab", "GrabFood"), ("gofood", "GoFood"),
+                      ("gojek", "GoFood"), ("tokopedia", "TikTok Tokopedia"), ("tiktok", "TikTok Tokopedia"), ("shopee", "Shopee")):
+        if key in n:
+            return name
+    return None
 
 
 def _key(h):
@@ -148,6 +163,11 @@ async def _check(rows, ctx, u):
             plat, r["channel"] = plat or as_plat, "Review Online"
         if plat and not r.get("channel"):
             r["channel"] = "Review Online"
+        sales = None
+        if r.get("sales"):
+            sales = sales_of(r["sales"])
+            if not sales:
+                err.append(f"Sales Channel '{r['sales']}' tidak dikenal")
         rating = None
         if r.get("rating"):
             dg = re.sub(r"[^\d]", "", r["rating"])[:1]
@@ -254,7 +274,7 @@ async def _check(rows, ctx, u):
                              "status": "Closed" if (closed and done) else "Selesai" if done else "Diproses",
                              "customerName": r.get("customerName") or None, "customerPhone": r.get("customerPhone") or None,
                              "orderNo": r.get("orderNo") or None, "order": od.isoformat() if od else None,
-                             "platform": plat if ch == "Review Online" else None, "rating": rating if ch == "Review Online" else None,
+                             "salesChannel": sales, "platform": plat if ch == "Review Online" else None, "rating": rating if ch == "Review Online" else None,
                              "frtMin": round((f - m).total_seconds() / 60) if (m and f) else None}})
     return out
 
@@ -296,7 +316,7 @@ async def bulk(body: BulkIn, u=Depends(require(*WRITERS))):
                          waktuResolved=(d["selesai"] or d["dibalas"]) if done else None,
                          rootCause=d["rootCause"] if done else None, kompensasiKey=d["kompensasiKey"] if done else None,
                          nilaiKompensasi=d["nilai"] if done else None, closed=d["status"] == "Closed", followUpUlang="N",
-                         orderNo=d["orderNo"], customerName=d["customerName"], customerPhone=d["customerPhone"], waktuOrder=d.get("order"), reviewPlatform=d.get("platform"), rating=d.get("rating"), force=True)
+                         orderNo=d["orderNo"], customerName=d["customerName"], customerPhone=d["customerPhone"], waktuOrder=d.get("order"), reviewPlatform=d.get("platform"), rating=d.get("rating"), salesChannel=d.get("salesChannel"), force=True)
             c = await do_rekap(rk, u, evidence_override="bulk")
             created.append({"row": r["row"], "caseId": c["caseId"], "kode": c.get("voucherCode")})
         except HTTPException as e:
@@ -351,25 +371,26 @@ async def bulk_template(u=Depends(require(*WRITERS))):
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = PatternFill("solid", fgColor="B42F27")
     ws.append(["16/11/2026", "10.02", "10.05", "10.30", "WhatsApp", "Jagakarsa", "Missing Item", "Pesan 10 pcs, diterima 8 pcs",
-               "Ketelitian Crew", "Replacement (porsi baru)", "", "Selesai", "Budi", "081211112222", "", "", "", "09.40"])
+               "Ketelitian Crew", "Replacement (porsi baru)", "", "Selesai", "Budi", "081211112222", "", "", "", "", "09.40"])
     ws.append(["16/11/2026", "13.40", "13.44", "", "IG DM", "Kios Margonda", "Speed of Service", "Pesanan lama dibuat",
-               "", "", "", "Diproses", "", "", "", "", "", "13.05"])
+               "", "", "", "Diproses", "", "", "", "", "", "", "13.05"])
     ws.append(["16/11/2026", "19.20", "20.05", "", "Review Online", "Kios Margonda", "Missing Item", "Pesan 3 yang datang 2",
-               "", "", "", "Diproses", "", "", "F-3308407390", "GoFood", "1", ""])
-    for i, w in enumerate([12, 10, 11, 11, 16, 24, 26, 40, 22, 28, 11, 11, 16, 15, 16, 15, 8, 11]):
+               "", "", "", "Diproses", "", "", "F-3308407390", "", "GoFood", "1", ""])
+    for i, w in enumerate([12, 10, 11, 11, 16, 24, 26, 40, 22, 28, 11, 11, 16, 15, 16, 16, 15, 8, 11]):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i + 1)].width = w
     ref = wb.create_sheet("Pilihan")
     ch = [c for c, v in ctx["channels"].items() if c != "CSAT Form" and not v.get("hidden")]
     sj = sorted(ctx["subJenis"].values(), key=lambda x: x.get("order", 0))
     kp = sorted(ctx["kompensasi"].values(), key=lambda x: x.get("order", 0))
-    ref.append(["Channel", "Sub Jenis", "Level", "Kompensasi", "Untuk level", "Status", "Platform Online"])
+    ref.append(["Channel", "Sub Jenis", "Level", "Kompensasi", "Untuk level", "Status", "Platform Online", "Sales Channel"])
     for c in ref[1]:
         c.font = Font(bold=True)
-    for i in range(max(len(ch), len(sj), len(kp), 4)):
+    for i in range(max(len(ch), len(sj), len(kp), 7)):
         ref.append([ch[i] if i < len(ch) else None, sj[i]["name"] if i < len(sj) else None, sj[i].get("level") if i < len(sj) else None,
                     kp[i]["label"] if i < len(kp) else None, kp[i]["level"] if i < len(kp) else None,
                     ["Diproses", "Selesai", "Closed"][i] if i < 3 else None,
-                    S.REVIEW_PLATFORMS[i] if i < len(S.REVIEW_PLATFORMS) else None])
+                    S.REVIEW_PLATFORMS[i] if i < len(S.REVIEW_PLATFORMS) else None,
+                    S.SALES_CHANNELS[i][0] if i < len(S.SALES_CHANNELS) else None])
     for col, w in zip("ABCDEF", (20, 40, 12, 52, 12, 12)):
         ref.column_dimensions[col].width = w
     note = wb.create_sheet("Petunjuk")

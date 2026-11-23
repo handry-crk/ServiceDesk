@@ -132,6 +132,27 @@ export function LevelTable({ d }) {
   )
 }
 
+export function SalesChannelTable({ d, meeting }) {
+  const sc = d.salesChannels
+  if (!sc) return null
+  return (
+    <Card className="overflow-x-auto">
+      <h3 className="font-bold p-4 pb-1">Komplain & transaksi per sales channel<Info text="Sales channel = tempat customer membeli. Transaksi diambil dari Data harian (Catat → Data harian) per channel." /></h3>
+      <p className="text-xs text-mute px-4 pb-2">Transaksi per channel terisi {sc.trxDays} dari {sc.days} hari.{!meeting && <> <Link to="/catat?mode=harian" className="text-brick underline">Isi data harian</Link></>}</p>
+      <table className="w-full text-sm">
+        <thead className="text-left text-mute"><tr>{['Sales channel', 'Komplain', '% kontribusi', 'Critical', 'Open', 'Transaksi', 'Komplain per 1.000 trx'].map((h) => <th key={h} className="px-3 py-2 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
+        <tbody>{sc.rows.map((r) => (
+          <tr key={r.kind + r.name} className={`border-t border-line tabnum ${r.kind === 'total' ? 'font-extrabold bg-cream' : r.kind === 'group' ? 'font-bold' : ''}`}>
+            <td className={`px-3 py-2 ${r.kind === 'channel' ? 'pl-8 font-normal' : ''}`}>{r.name}</td>
+            <td className="px-3 py-2">{r.komplain}</td><td className="px-3 py-2">{r.kind === 'total' ? '' : fmtPct(r.pct)}</td>
+            <td className={`px-3 py-2 ${r.critical ? 'text-brick' : ''}`}>{r.critical}</td><td className="px-3 py-2">{r.open}</td>
+            <td className="px-3 py-2">{r.transaksi == null ? '–' : fmtNum(r.transaksi)}</td><td className="px-3 py-2">{r.per1000 == null ? '–' : fmtNum(r.per1000)}</td>
+          </tr>))}</tbody>
+      </table>
+    </Card>
+  )
+}
+
 export function MemberTable({ d }) {
   const tg = d.targets.frt?.target
   const rows = d.members || []
@@ -291,6 +312,7 @@ export function DashboardBody({ d, meeting }) {
         <LevelTable d={d} />
       </div>
       <LevelBreakdown d={d} />
+      <SalesChannelTable d={d} meeting={meeting} />
       <MemberTable d={d} />
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="Komplain per sub jenis (top 10)" insight={d.insights.subJenis}>

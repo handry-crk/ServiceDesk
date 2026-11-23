@@ -68,7 +68,7 @@ export default function CaseDetail() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="p-4">
           <h3 className="font-bold mb-2">Klasifikasi (CRM.STD.001)</h3>
-          <Row k="Jenis" v={c.jenis} /><Row k="Level standard" v={c.levelStandard} /><Row k="Level dipakai" v={c.level} />
+          <Row k="Jenis" v={c.jenis} />{c.priority && <Row k="Prioritas" v={c.priority} />}<Row k="Level standard" v={c.levelStandard} /><Row k="Level dipakai" v={c.level} />
           {c.levelChangeReason && <Row k="Alasan ubah level" v={c.levelChangeReason} />}
           <Row k="Penanggung jawab" v={c.penanggungJawab} /><Row k="Cost center" v={c.costCenter} />
           {c.costCenterFinal && <Row k="Cost center final" v={c.costCenterFinal} />}
@@ -98,7 +98,7 @@ export default function CaseDetail() {
         </Card>}
         <Card className="p-4">
           <h3 className="font-bold mb-2">Customer & sumber</h3>
-          <Row k="Channel" v={c.channel} />{c.reviewPlatform && <Row k="Platform online" v={`${c.reviewPlatform}${c.rating ? ` · ${c.rating} ★` : ''}`} />}<Row k="Brand" v={c.brand} /><Row k="Tipe" v={c.tipe} /><Row k="Valid" v={c.valid} />
+          <Row k="Sales channel" v={`${c.salesChannel || '–'}${c.salesGroup ? ` · ${c.salesGroup}` : ''}${c.salesChannelManual ? ' (manual)' : ''}`} /><Row k="Channel kontak" v={c.channel} />{c.reviewPlatform && <Row k="Platform online" v={`${c.reviewPlatform}${c.rating ? ` · ${c.rating} ★` : ''}`} />}<Row k="Brand" v={c.brand} /><Row k="Tipe" v={c.tipe} /><Row k="Valid" v={c.valid} />
           <Row k="No. pesanan" v={c.orderNo} /><Row k="Nama" v={c.customerName} /><Row k="No. HP" v={c.customerPhone} />
           <Row k="Desk CS" v={deskLabel(c.desk) + (c.deskOverride ? ' (dipindah manual)' : '')} /><Row k="Dicatat oleh" v={c.csAgent} />{c.frBy && <Row k="Dibalas oleh" v={c.frBy} />}<Row k="Sumber" v={c.source} />
           {c.notes && <Row k="Catatan impor" v={c.notes} />}
@@ -376,7 +376,7 @@ function TimeSheet({ open, onClose, c, onDone }) {
 function EditSheet({ open, onClose, c, masters, onDone, limited }) {
   const [b, setB] = useState({})
   const fz = !!c.frozen || c.outletType === 'online_frozen'
-  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, deskOverride: c.deskOverride || '', produkFrozen: !!c.produkFrozen, waktuOrderLocal: c.waktuOrder ? toLocalInput(c.waktuOrder) : '', tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
+  useEffect(() => { if (open) setB({ ringkasan: c.ringkasan, orderNo: c.orderNo || '', customerName: c.customerName || '', customerPhone: c.customerPhone || '', subJenis: c.subJenis, outletId: c.outletId, channel: c.channel, deskOverride: c.deskOverride || '', salesChannel: c.salesChannelManual || '', produkFrozen: !!c.produkFrozen, waktuOrderLocal: c.waktuOrder ? toLocalInput(c.waktuOrder) : '', tipe: c.tipe, valid: c.valid, rootCause: c.rootCause || '', costCenterFinal: c.costCenterFinal || '', picDept: c.picDept || '', ...(fz ? { produk: c.produk || '', kodeProduksi: c.kodeProduksi || '', ekspedisi: c.ekspedisi || '', noResi: c.noResi || '', qtyPesan: c.qtyPesan ?? '', qtyDiterima: c.qtyDiterima ?? '' } : {}) }) }, [open, c])
   const subs = (masters?.subJenis || []).map((s) => ({ value: s.name, label: s.name, sub: s.contoh, keywords: s.keywords, level: s.level }))
   const outlets = (masters?.outlets || []).map((o) => ({ value: o.id, label: o.name, sub: o.area }))
   const set = (k) => (e) => setB({ ...b, [k]: e.target ? e.target.value : e })
@@ -385,7 +385,7 @@ function EditSheet({ open, onClose, c, masters, onDone, limited }) {
     const oldOrder = c.waktuOrder ? toLocalInput(c.waktuOrder) : ''
     const extraOrder = !limited && (b.waktuOrderLocal || '') !== oldOrder ? { waktuOrder: b.waktuOrderLocal ? fromLocalInput(b.waktuOrderLocal) : '' } : {}
     const num = (k, v) => (['qtyPesan', 'qtyDiterima'].includes(k) ? (v === '' ? null : Number(v)) : v)
-    onDone(Object.fromEntries(keys.filter((k) => String(b[k] ?? '') !== String(c[k] ?? '')).map((k) => [k, num(k, b[k])]).filter(([, v]) => v !== null).concat(Object.entries(extraOrder))))
+    onDone(Object.fromEntries(keys.filter((k) => String(b[k] ?? '') !== String((k === 'salesChannel' ? c.salesChannelManual : c[k]) ?? '')).map((k) => [k, num(k, b[k])]).filter(([, v]) => v !== null).concat(Object.entries(extraOrder))))
   }
   return (
     <Sheet open={open} onClose={onClose} title={limited ? (fz ? 'Root cause, cost center & kode produksi' : 'Root cause & cost center') : 'Ubah data case'} wide>
@@ -398,6 +398,7 @@ function EditSheet({ open, onClose, c, masters, onDone, limited }) {
           <Field label="Tipe"><select className={inputCls} value={b.tipe} onChange={set('tipe')}>{masters?.tipe.map((x) => <option key={x}>{x}</option>)}</select></Field>
           <Field label="Komplain valid"><select className={inputCls} value={b.valid} onChange={set('valid')}><option>Y</option><option>N</option></select></Field>
           <Field label="PIC Dept"><select className={inputCls} value={b.picDept} onChange={set('picDept')}><option value="">–</option>{masters?.picDept.map((x) => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="Sales channel" hint="Tempat customer membeli."><select className={inputCls} value={b.salesChannel || ''} onChange={set('salesChannel')}><option value="">Otomatis</option>{(masters?.salesChannels || []).map((x) => <option key={x.name} value={x.name}>{x.name} ({x.group})</option>)}</select></Field>
           <Field label="Desk CS" hint="Otomatis dari channel & outlet. Ubah bila case harus ditangani desk lain."><select className={inputCls} value={b.deskOverride || ''} onChange={set('deskOverride')}><option value="">Otomatis ({deskLabel(c.deskOverride ? null : c.desk)})</option><option value="Online">CS Online / Marketplace</option><option value="Offline">CS Offline</option></select></Field>
           {c.outletType !== 'online_frozen' && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="w-5 h-5" checked={!!b.produkFrozen} onChange={(e) => setB({ ...b, produkFrozen: e.target.checked })} />Komplain produk Cimol Frozen (kemasan beku)</label>}
           <Field label="No. pesanan"><input className={inputCls} value={b.orderNo || ''} onChange={set('orderNo')} /></Field>

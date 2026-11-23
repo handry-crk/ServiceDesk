@@ -8,7 +8,8 @@ from .standards import NEEDS_BATCH
 from . import standards as S
 
 # CRM.STD.001 5.1: benda asing, potensi keracunan, tidak matang → Factory/Operasional sesuai root cause
-CRITICAL_COST_RC = {"Kontaminasi", "Keracunan", "Undercooked"}
+CRITICAL_COST_RC = {"Kontaminasi", "Keracunan", "Undercooked", "Benda Asing (Frozen)", "Produk Asam / Masam (Frozen)",
+                    "Berjamur (Frozen)", "Expired (Frozen)"}
 CC_ROOT = "Factory/Operasional (cek root cause)"
 
 
@@ -175,7 +176,7 @@ def compute_case(c: dict, ctx: dict) -> dict:
     frozen = otype == "online_frozen" or bool(c.get("produkFrozen"))
     c["frozen"] = frozen
     if lvl == "Minor":
-        cc = "Factory" if (frozen and sname == "Kesalahan Kemasan") else "Operasional"
+        cc = "Factory" if (frozen and sname in ("Kesalahan Kemasan", "Kemasan Bocor (Frozen)", "Packaging Rusak (Frozen)")) else "Operasional"
     elif lvl == "Major":
         cc = "Team Frozen" if frozen else "Operasional"
     elif lvl == "Critical":
@@ -201,6 +202,9 @@ def compute_case(c: dict, ctx: dict) -> dict:
     if c.get("subJenis") == S.NO_COMPLAINT:
         c["kompensasiOutsideStandard"] = False
 
+    c["priority"] = sj.get("priority") if sj else None
+    c["salesChannel"] = c.get("salesChannelManual") or S.derive_sales_channel(c, outlet)
+    c["salesGroup"] = S.SALES_GROUP.get(c["salesChannel"], "Offline")
     # target & SLA
     ch = ctx["channels"].get(c.get("channel") or "") or {}
     # desk CS yang menangani: Online/Marketplace bila toko online frozen atau channel online; selain itu Offline

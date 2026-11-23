@@ -722,9 +722,10 @@ def test_frozen_subs_and_generic_chat(ctx):
     c, H, o = ctx
     m = c.get("/api/masters", headers=H).json()
     fz = [s for s in m["subJenis"] if s.get("frozen")]
-    assert {"Missing Item", "Cacat Produksi", "Delivery / Ekspedisi", "Kesalahan Kemasan"} <= {s["name"] for s in fz}
-    mi = next(s for s in fz if s["name"] == "Missing Item")
-    assert "kekurangan" in mi["keywords"] and mi["frozenContoh"].startswith("Produk kurang")
+    assert {"Pesanan Kurang (Frozen)", "Salah Varian (Frozen)", "Kemasan Bocor (Frozen)", "Pengiriman Lama / Tidak Ada Update"} <= {s["name"] for s in fz}
+    assert "Missing Item" not in {s["name"] for s in fz} and len([s for s in m["subJenis"] if s.get("priority")]) == 30
+    mi = next(s for s in fz if s["name"] == "Pesanan Kurang (Frozen)")
+    assert "kekurangan" in mi["keywords"] and mi["priority"] == "Critical" and mi["jenis"] == "Frozen Product"
     t = "Budi_shop 2026-11-02 10:02:11\nkak paket kurang 1 pack\nCimol Bojot AA Official 2026-11-02 10:09:40\nmohon maaf kak\n"
     p = c.post("/api/wa/parse", json={"text": t}, headers=H).json()
     assert p["messages"] == 2 and p["customer"] == "Budi_shop" and p["dibalas"].startswith("2026-11-02T10:09")
@@ -845,3 +846,45 @@ def test_no_complaint(ctx):
     t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\tStatus\n05/03/2026\t10.00\t10.02\tWA\tJagakarsa\tno complaint\tpujian\tSelesai"
     p = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()
     assert p["rows"][0]["ok"], p["rows"][0]
+
+
+def test_new_frozen_categories_rules(ctx):
+    c, H, o = ctx
+    sp = o["Online Frozen (Shopee)"]
+    a = mk(c, H, o, outletId=sp, subJenis="Produk Asam / Masam (Frozen)", ringkasan="asam", waktuMasuk=wib_iso(2026, 2, 3, 10, 0)).json()
+    assert a["level"] == "Critical" and a["jenis"] == "Frozen Product" and a["priority"] == "Critical" and a["costCenter"].startswith("Factory/Operasional")
+    assert a["picDept"] == "Gudang / Packing Frozen" and "Kode produksi belum diisi" in a["dataIssues"] and a["salesChannel"] == "Shopee" and a["salesGroup"] == "Marketplace"
+    b = mk(c, H, o, outletId=sp, subJenis="Kemasan Bocor (Frozen)", ringkasan="bocor", waktuMasuk=wib_iso(2026, 2, 3, 11, 0)).json()
+    assert b["level"] == "Minor" and b["costCenter"] == "Factory"
+    d = mk(c, H, o, outletId=o["Online Frozen (Tiktok 2)"], subJenis="Pengiriman Lama / Tidak Ada Update", ringkasan="lama", waktuMasuk=wib_iso(2026, 2, 3, 12, 0)).json()
+    assert d["level"] is None and d["picDept"] == "Logistics / Delivery" and d["salesChannel"] == "TikTok Tokopedia"
+    e = mk(c, H, o, subJenis="Voucher Tidak Bisa Dipakai", ringkasan="voucher", waktuMasuk=wib_iso(2026, 2, 3, 13, 0)).json()
+    assert e["jenis"] == "Membership / Promo" and e["salesChannel"] == "Outlet / Kios" and e["salesGroup"] == "Offline"
+
+
+def test_sales_channel_breakdown(ctx):
+    c, H, o = ctx
+    day = "2026-01-13"
+    mk(c, H, o, ringkasan="sc outlet", waktuMasuk=wib_iso(2026, 1, 13, 9, 0))
+    mk(c, H, o, ringkasan="sc grab via wa", waktuMasuk=wib_iso(2026, 1, 13, 10, 0), salesChannel="GrabFood")
+    c.post("/api/cases/rekap", json={"channel": "Review Online", "reviewPlatform": "TikTok Go", "outletId": o["Jagakarsa"], "subJenis": "Hospitality",
+           "ringkasan": "sc tiktok go", "waktuMasuk": wib_iso(2026, 1, 13, 11, 0), "force": True}, headers=H)
+    mk(c, H, o, outletId=o["Online Frozen (Shopee)"], subJenis="Pesanan Kurang (Frozen)", ringkasan="sc shopee", waktuMasuk=wib_iso(2026, 1, 13, 12, 0))
+    assert mk(c, H, o, ringkasan="x", salesChannel="Lazada").status_code == 400
+    r = c.put("/api/daily", json={"tanggal": day, "trx": {"Outlet / Kios": 1000, "GrabFood": 200, "TikTok Go": 50, "Shopee": 100},
+                                  "kom": {"Outlet / Kios": 2, "GrabFood": 1, "TikTok Go": 1, "Shopee": 1}}, headers=H)
+    assert r.status_code == 200
+    assert c.put("/api/daily", json={"tanggal": day, "trx": {"Lazada": 5}}, headers=H).status_code == 400
+    d = c.get("/api/daily", params={"from": day, "to": day}, headers=H).json()
+    row = d["rows"][0]
+    assert row["transaksi"] == 1350 and row["komplain"] == 5 and row["tercatat"] == 4 and row["selisih"] == 1
+    assert row["groups"]["Online Aggregator"] == {"transaksi": 250, "komplain": 2, "tercatat": 2}
+    ch = {x["name"]: x for x in d["channels"]}
+    assert ch["Offline"]["tercatat"] == 1 and ch["GrabFood"]["tercatat"] == 1 and ch["TikTok Go"]["transaksi"] == 50 and ch["Marketplace"]["per1000"] == 10.0
+    dash = c.get("/api/dashboard", params={"from": day, "to": day}, headers=H).json()
+    sc = {x["name"]: x for x in dash["salesChannels"]["rows"]}
+    assert sc["Total"]["komplain"] == 4 and sc["Total"]["transaksi"] == 1350 and sc["Online Aggregator"]["komplain"] == 2
+    assert sc["Shopee"]["per1000"] == 10.0 and sc["Offline"]["per1000"] == 1.0 and dash["period"]["totalTrx"] == 1350
+    t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\tSales Channel\n14/01/2026\t10.00\t10.02\tWA\tJagakarsa\tHospitality\tsc bulk\tshopee food"
+    p = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()
+    assert p["rows"][0]["data"]["salesChannel"] == "ShopeeFood"

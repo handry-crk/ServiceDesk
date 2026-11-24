@@ -17,7 +17,7 @@ from . import standards as S
 
 router = APIRouter(prefix="/api")
 
-REG_ROLES = ["CS Lead", "Marketing TL", "CS Agent"]  # peran yang boleh didaftarkan sendiri
+REG_ROLES = ["CS Lead", "Marketing TL", "CS Agent", "Ops Manager"]  # peran yang boleh didaftarkan sendiri
 CODE_TTL_MIN = 30
 RATE_LIMIT = 5  # pendaftaran per IP per jam
 

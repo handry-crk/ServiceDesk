@@ -13,7 +13,7 @@ from .logic import load_ctx, _avg, _rate
 from .services import new_id, add_event, save_case, get_case_or_404
 
 router = APIRouter(prefix="/api")
-VIEWERS = ("Admin", "CS Lead", "Marketing TL")
+VIEWERS = ("Admin", "CS Lead", "Marketing TL", "Ops Manager")
 
 
 def _resp_by(c):

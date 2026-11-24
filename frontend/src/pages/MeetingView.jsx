@@ -176,7 +176,7 @@ export default function MeetingView() {
                     <div className="text-lg font-semibold">{a.action}</div>
                     <div className="text-sm text-mute">{a.picDept || '-'}{a.picName ? ` · ${a.picName}` : ''} · deadline {fmtD(a.deadline)}</div>
                     {a.updates?.length > 0 && <div className="text-xs text-mute mt-1">Update terakhir: {a.updates[a.updates.length - 1].text}</div>}
-                    {can(...MEETING_EDITORS, 'Manager Area', 'Ops/QC') && <div className="flex flex-wrap gap-1 mt-2 no-print">{STATUSES.map((s) => <button key={s} onClick={() => updateAction(a, s)} className={`text-xs px-2.5 py-1.5 rounded-lg font-bold ${a.status === s ? ST_CLS[s] + ' ring-2 ring-ink/20' : 'bg-cream'}`}>{s}</button>)}</div>}
+                    {can(...MEETING_EDITORS, 'Ops Manager', 'Manager Area', 'Ops/QC') && <div className="flex flex-wrap gap-1 mt-2 no-print">{STATUSES.map((s) => <button key={s} onClick={() => updateAction(a, s)} className={`text-xs px-2.5 py-1.5 rounded-lg font-bold ${a.status === s ? ST_CLS[s] + ' ring-2 ring-ink/20' : 'bg-cream'}`}>{s}</button>)}</div>}
                   </div>
                 )
               })}

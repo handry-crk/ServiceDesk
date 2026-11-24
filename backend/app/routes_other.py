@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
 from . import standards as S
-from .auth import (current_user, require, LEAD, WRITERS, ROLES, hash_pin, login, public_user, check_slot, email_ok,
+from .auth import (current_user, require, LEAD, WRITERS, ROLES, hash_pin, login, public_user, check_slot, email_ok, OPS_ROLES,
                    ROLE_SLOTS, ROLE_LABEL, MEETING_EDITORS)
 from .core import get_db, now, clean, parse_iso, Config, wib_date, wib, WIB, mask_phone, log
 from .logic import load_ctx
@@ -536,7 +536,7 @@ async def import_vouchers(body: dict, u=Depends(require(*LEAD))):
 
 
 @router.get("/vouchers/lookup/{kode}")
-async def voucher_lookup(kode: str, u=Depends(require(*WRITERS, "Manager Area", "Ops/QC"))):
+async def voucher_lookup(kode: str, u=Depends(require(*WRITERS, *OPS_ROLES))):
     """Cek kode complimentary saat customer datang ke outlet / saat refund diproses."""
     db = get_db()
     v = await db.vouchers.find_one({"kode": kode.strip().upper()})
@@ -552,9 +552,9 @@ async def voucher_lookup(kode: str, u=Depends(require(*WRITERS, "Manager Area", 
 
 
 @router.post("/vouchers/{kode}/status")
-async def voucher_status(kode: str, body: dict, u=Depends(require(*WRITERS, "Manager Area", "Ops/QC"))):
+async def voucher_status(kode: str, body: dict, u=Depends(require(*WRITERS, *OPS_ROLES))):
     st = body.get("status")
-    if u["role"] in ("Manager Area", "Ops/QC") and st != "Terpakai":
+    if u["role"] in OPS_ROLES and st != "Terpakai":
         raise HTTPException(403, "Peran Anda hanya bisa menandai kode terpakai / diterima.")
     v0 = await get_db().vouchers.find_one({"kode": kode})
     if not v0:
@@ -619,7 +619,7 @@ EXPORT_COLS = [
 
 
 @router.get("/export/cases.xlsx")
-async def export_cases(u=Depends(require("Admin", "CS Lead", "CS Agent", "Marketing TL", "Viewer", "Ops/QC", "Manager Area")),
+async def export_cases(u=Depends(require("Admin", "CS Lead", "CS Agent", "Marketing TL", "Viewer", *OPS_ROLES)),
                        frm: Optional[str] = Query(None, alias="from"), to: Optional[str] = None):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill

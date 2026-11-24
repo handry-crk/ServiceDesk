@@ -21,7 +21,7 @@ export default function CaseDetail() {
   const close = () => { setSheet(null); if (sp.get('aksi')) setSp({}) }
   const writer = can(...WRITERS)
   const lead = can(...LEAD)
-  const limited = can('Manager Area', 'Ops/QC')
+  const limited = can('Ops Manager', 'Manager Area', 'Ops/QC')
 
   const act = async (path, body, msg) => {
     try { const r = await api(`/cases/${id}/${path}`, { method: 'POST', body }); notify(msg); close(); await reload(); return r }

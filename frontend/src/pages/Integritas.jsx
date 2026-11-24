@@ -10,7 +10,7 @@ export default function Integritas() {
   const { can } = useApp()
   const [sp, setSp] = useSearchParams()
   const tab = TABS.some(([k]) => k === sp.get('tab')) ? sp.get('tab') : 'pengajuan'
-  if (!can('Admin', 'CS Lead', 'Marketing TL')) return <ErrorBox error={{ message: 'Halaman ini untuk CRM Supervisor, Marketing TL, dan Admin.' }} />
+  if (!can('Admin', 'CS Lead', 'Marketing TL', 'Ops Manager')) return <ErrorBox error={{ message: 'Halaman ini untuk CRM Supervisor, Marketing TL, dan Admin.' }} />
   return (
     <div>
       <h1 className="text-2xl font-extrabold">Integritas waktu</h1>

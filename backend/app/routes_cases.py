@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from .auth import current_user, require, LEAD, WRITERS, MEETING_EDITORS
+from .auth import current_user, require, LEAD, WRITERS, MEETING_EDITORS, OPS_ROLES
 from .core import get_db, now, parse_iso, as_utc, clean, mask_phone, wib_date, Config
 from . import standards as S
 from .logic import compute_case, load_ctx, compute_metrics, breakdown, weekly, by_hour, insights, suggest_insights, by_member, level_breakdown, by_desk
@@ -265,7 +265,7 @@ async def patch_case(case_id: str, body: PatchIn, u=Depends(current_user)):
     limited = {"rootCause", "notes", "costCenterFinal", "kodeProduksi"}
     if body.waktuOrder == "":
         data["waktuOrder"] = ""
-    if u["role"] in ("Manager Area", "Ops/QC"):
+    if u["role"] in OPS_ROLES:
         if set(data) - limited:
             raise HTTPException(403, "Peran Anda hanya bisa mengisi root cause, catatan, cost center final, dan kode produksi.")
     elif u["role"] == "Viewer":
@@ -532,7 +532,7 @@ async def reopen(case_id: str, body: dict, u=Depends(require(*WRITERS))):
 
 
 @router.post("/cases/{case_id}/note")
-async def note(case_id: str, body: dict, u=Depends(require("Admin", "CS Lead", "CS Agent", "Manager Area", "Ops/QC"))):
+async def note(case_id: str, body: dict, u=Depends(require(*WRITERS, *OPS_ROLES))):
     check_area(u, await get_case_or_404(case_id))
     t = (body.get("text") or "").strip()
     if not t:
@@ -1121,14 +1121,14 @@ async def actions(u=Depends(current_user), status: Optional[str] = None):
 
 
 @router.post("/voc-actions")
-async def add_action(body: ActionIn, u=Depends(require(*MEETING_EDITORS, "Manager Area", "Ops/QC"))):
+async def add_action(body: ActionIn, u=Depends(require(*MEETING_EDITORS, *OPS_ROLES))):
     a = {"id": new_id(), **body.model_dump(), "updates": [], "createdAt": now(), "createdBy": u["name"]}
     await get_db().voc_actions.insert_one(a)
     return clean(a)
 
 
 @router.patch("/voc-actions/{aid}")
-async def patch_action(aid: str, body: dict, u=Depends(require(*MEETING_EDITORS, "Manager Area", "Ops/QC"))):
+async def patch_action(aid: str, body: dict, u=Depends(require(*MEETING_EDITORS, *OPS_ROLES))):
     db = get_db()
     a = await db.voc_actions.find_one({"id": aid})
     if not a:

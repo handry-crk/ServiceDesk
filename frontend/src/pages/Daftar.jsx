@@ -7,6 +7,7 @@ const DESC = {
   'CS Lead': 'Memantau case, membereskan data, memimpin meeting Service Excellence, mengelola pengaturan.',
   'Marketing TL': 'Melihat dashboard & case, menyusun insight dan action di meeting.',
   'CS Agent': 'Mencatat dan menangani komplain customer setiap hari.',
+  'Ops Manager': 'Melihat semua case & dashboard semua area, mengisi root cause, cost center final, kode produksi, dan action meeting.',
 }
 const STATUS = {
   verify: ['Cek email Anda', 'Masukkan kode 6 digit yang dikirim ke email kantor.'],

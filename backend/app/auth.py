@@ -7,13 +7,17 @@ from fastapi import Depends, Header, HTTPException
 
 from .core import get_db, now, as_utc, Config
 
-ROLES = ["Admin", "CS Lead", "Marketing TL", "CS Agent", "Manager Area", "Ops/QC", "Viewer"]
-ROLE_LABEL = {"CS Lead": "CRM Supervisor", "Marketing TL": "Marketing Team Leader", "CS Agent": "Customer Service"}
+ROLES = ["Admin", "CS Lead", "Marketing TL", "CS Agent", "Ops Manager", "Manager Area", "Ops/QC", "Viewer"]
+ROLE_LABEL = {"CS Lead": "CRM Supervisor", "Marketing TL": "Marketing Team Leader", "CS Agent": "Customer Service",
+              "Ops Manager": "Operation Manager"}
 # Kuota user AKTIF per peran (pendaftaran member baru + pembuatan user oleh admin)
-ROLE_SLOTS = {"CS Lead": 1, "Marketing TL": 1, "CS Agent": 5}
+ROLE_SLOTS = {"CS Lead": 1, "Marketing TL": 1, "CS Agent": 5, "Ops Manager": 2}
 MEETING_EDITORS = ("Admin", "CS Lead", "CS Agent", "Marketing TL")
 LEAD = ("Admin", "CS Lead")
 WRITERS = ("Admin", "CS Lead", "CS Agent")
+# Peran operasional: melihat case & dashboard, mengisi root cause / cost center final / kode produksi / catatan / action.
+# Operation Manager melihat semua area; Manager Area hanya areanya.
+OPS_ROLES = ("Ops Manager", "Manager Area", "Ops/QC")
 
 
 def hash_pin(pin: str, salt: str | None = None):

@@ -256,7 +256,7 @@ function Users() {
         <div className="flex flex-wrap justify-between gap-2 mb-3"><h3 className="font-bold">User & peran</h3>
           <div className="flex gap-2 items-center"><label className="text-xs flex items-center gap-1"><input type="checkbox" checked={showOff} onChange={(e) => setShowOff(e.target.checked)} />Tampilkan nonaktif</label>
             <Btn size="sm" onClick={() => setNu({ name: '', email: '', role: 'CS Agent', pin: '', areas: [] })}>+ User</Btn></div></div>
-        <div className="text-xs text-mute mb-3">Kuota: CRM Supervisor 1 · Marketing Team Leader 1 · Customer Service 5 (user aktif). Manager Area, Ops/QC, Viewer tanpa kuota, dibuat Admin/CRM Supervisor.</div>
+        <div className="text-xs text-mute mb-3">Kuota: CRM Supervisor 1 · Marketing Team Leader 1 · Customer Service 5 · Operation Manager 2 (user aktif). Manager Area, Ops/QC, Viewer tanpa kuota, dibuat Admin/CRM Supervisor.</div>
         <div className="overflow-x-auto"><table className="w-full text-sm"><tbody>{rows.map((u) => (
           <tr key={u.id} className={`border-t border-line ${u.active ? '' : 'opacity-50'}`}>
             <td className="p-2"><div className="font-semibold">{u.name}{u.locked && <span className="ml-2 text-xs text-brick">terkunci</span>}</div><div className="text-xs text-mute">{u.email || 'login dengan nama'}</div></td>

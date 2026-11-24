@@ -52,7 +52,7 @@ def test_validation(c):
     assert reg(c, "Bu").status_code == 400
     info = c.get("/api/public/register/info").json()
     assert info["domain"] == "citarasakuliner.com"
-    assert {r["role"]: r["slots"] for r in info["roles"]} == {"CS Lead": 1, "Marketing TL": 1, "CS Agent": 5}
+    assert {r["role"]: r["slots"] for r in info["roles"]} == {"CS Lead": 1, "Marketing TL": 1, "CS Agent": 5, "Ops Manager": 2}
     # data rahasia tidak bocor & daftar nama tidak lagi publik
     assert c.get("/api/auth/users").status_code in (404, 405) or c.get("/api/auth/users").headers["content-type"].startswith("text/html")
 

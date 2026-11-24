@@ -84,7 +84,7 @@ export function AppProvider({ children }) {
 export const WRITERS = ['Admin', 'CS Lead', 'CS Agent']
 export const LEAD = ['Admin', 'CS Lead']
 export const MEETING_EDITORS = ['Admin', 'CS Lead', 'CS Agent', 'Marketing TL']
-export const ROLE_LABEL = { 'CS Lead': 'CRM Supervisor', 'Marketing TL': 'Marketing Team Leader', 'CS Agent': 'Customer Service' }
+export const ROLE_LABEL = { 'CS Lead': 'CRM Supervisor', 'Marketing TL': 'Marketing Team Leader', 'CS Agent': 'Customer Service', 'Ops Manager': 'Operation Manager' }
 export const roleLabel = (r) => ROLE_LABEL[r] || r
 
 // ---------------- format ----------------
@@ -177,3 +177,5 @@ export function workMinutes(start, end, st = {}) {
 
 export const DESK_LABEL = { Online: 'CS Online / Marketplace', Offline: 'CS Offline' }
 export const deskLabel = (d) => DESK_LABEL[d] || d || '–'
+
+export const OPS_ROLES = ['Ops Manager', 'Manager Area', 'Ops/QC']

@@ -888,3 +888,21 @@ def test_sales_channel_breakdown(ctx):
     t = "Tanggal\tJam Masuk\tJam Dibalas\tChannel\tOutlet\tSub Jenis\tRingkasan\tSales Channel\n14/01/2026\t10.00\t10.02\tWA\tJagakarsa\tHospitality\tsc bulk\tshopee food"
     p = c.post("/api/cases/bulk", json={"text": t}, headers=H).json()
     assert p["rows"][0]["data"]["salesChannel"] == "ShopeeFood"
+
+
+def test_ops_manager_role(ctx):
+    c, H, o = ctx
+    r = c.post("/api/users", json={"name": "Opsman", "role": "Ops Manager", "pin": "787878"}, headers=H)
+    assert r.status_code == 200 and r.json()["roleLabel"] == "Operation Manager"
+    P = login(c, "Opsman", "787878")
+    k = mk(c, H, o, outletId=o["Kosambi"], subJenis="Undercooked", ringkasan="opsman", waktuMasuk=wib_iso(2025, 12, 2, 10, 0)).json()
+    assert c.get(f"/api/cases/{k['caseId']}", headers=P).status_code == 200           # semua area
+    assert c.get("/api/dashboard", params={"from": "2025-12-02", "to": "2025-12-02"}, headers=P).json()["volume"]["komplain"] == 1
+    assert c.patch(f"/api/cases/{k['caseId']}", json={"rootCause": "SOP goreng", "costCenterFinal": "Operasional"}, headers=P).status_code == 200
+    assert c.patch(f"/api/cases/{k['caseId']}", json={"ringkasan": "ubah"}, headers=P).status_code == 403
+    assert mk(c, P, o, ringkasan="tidak boleh").status_code == 403
+    assert c.post(f"/api/cases/{k['caseId']}/note", json={"text": "sudah briefing crew"}, headers=P).status_code == 200
+    assert c.get("/api/integrity", params={"frm": "2025-12-01", "to": "2025-12-02"}, headers=P).status_code == 200
+    assert c.put("/api/masters/settings", json={"value": {}}, headers=P).status_code == 403
+    info = c.get("/api/public/register/info").json()
+    assert any(x["role"] == "Ops Manager" and x["slots"] == 2 for x in info["roles"])
